@@ -9,8 +9,13 @@ layouts, so each step tries several selectors and fails with a clear message.
 """
 import argparse
 import re
+import time
 from pathlib import Path
 
+from browser_publish_verification import (
+    classify_x_publish_response,
+    is_x_publish_response,
+)
 from x_browser_lib import (
     COMPOSE_URL,
     HOME_URL,
@@ -218,46 +223,96 @@ def click_post(page, enable_timeout_ms):
             raise RuntimeError("Found the X Post button but could not click it.") from exc
 
 
-def wait_for_sent(page, timeout_ms):
-    """Returns (sent, url). url is the new post's link from the success toast.
-
-    After a post sends, X shows a toast ("Your post was sent. View") whose View
-    link points at the new status URL, so we read that href to surface the link
-    in the publish history.
-    """
-    toast_timeout = min(max(timeout_ms, 10_000), 20_000)
+def track_publish_response(response, outcome):
+    """Capture X's definitive CreateTweet/CreateNoteTweet web response."""
     try:
-        page.locator('[data-testid="toast"]').first.wait_for(
-            state="visible", timeout=toast_timeout
-        )
-        href = page.evaluate(
-            """() => {
-              const t = document.querySelector('[data-testid="toast"]');
-              if (!t) return null;
-              const a = t.querySelector('a[href*="/status/"]');
-              return a ? a.getAttribute('href') : null;
-            }"""
-        )
-        if href:
-            url = ("https://x.com" + href) if href.startswith("/") else href
-            return True, url
-        # A toast without a link still confirms the post sent.
-        try:
-            text = page.locator('[data-testid="toast"]').first.inner_text(timeout=1500)
-        except Exception:
-            text = ""
-        if re.search("sent|posted", text, re.I):
-            return True, None
+        method = response.request.method
+        url = response.url
+    except Exception:
+        return
+
+    if not is_x_publish_response(url, method):
+        return
+
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+
+    classified = classify_x_publish_response(url, method, response.status, payload)
+
+    if classified is not None:
+        outcome.clear()
+        outcome.update(classified)
+
+
+def toast_publish_outcome(page):
+    toast = page.locator('[data-testid="toast"]').first
+
+    try:
+        if not toast.is_visible(timeout=250):
+            return None
+        text = toast.inner_text(timeout=1000)
+    except Exception:
+        return None
+
+    href = None
+    try:
+        link = toast.locator('a[href*="/status/"]').first
+        if link.count() > 0:
+            href = link.get_attribute("href", timeout=1000)
     except Exception:
         pass
-    # Fallback: the composer closing means the post went through (no link captured).
-    try:
-        page.locator('div[data-testid="tweetTextarea_0"]').first.wait_for(
-            state="detached", timeout=8_000
-        )
-        return True, None
-    except Exception:
-        return False, None
+
+    if re.search(r"sent|posted", text, re.I):
+        outcome = {"ok": True, "message": "X confirmed the post."}
+        if href:
+            outcome["url"] = ("https://x.com" + href) if href.startswith("/") else href
+        return outcome
+
+    if re.search(r"failed|error|went wrong|try again|not sent", text, re.I):
+        return {"ok": False, "message": text.strip() or "X rejected the post."}
+
+    return None
+
+
+def wait_for_sent(page, composer, response_outcome, timeout_ms):
+    """Wait for a network confirmation, then fall back to transient UI signals."""
+    deadline = time.monotonic() + max(timeout_ms, 10_000) / 1000
+    composer_closed_at = None
+
+    while time.monotonic() < deadline:
+        if response_outcome:
+            return dict(response_outcome)
+
+        toast_outcome = toast_publish_outcome(page)
+        if toast_outcome is not None:
+            return toast_outcome
+
+        try:
+            composer_visible = composer.is_visible(timeout=250)
+        except Exception:
+            composer_visible = False
+
+        if not composer_visible:
+            composer_closed_at = composer_closed_at or time.monotonic()
+            # Give the CreateTweet response/toast a moment to arrive before using
+            # the modal closing as a secondary success signal.
+            if time.monotonic() - composer_closed_at >= 2:
+                return {"ok": True, "message": "X closed the composer after posting."}
+        else:
+            composer_closed_at = None
+
+        page.wait_for_timeout(250)
+
+    return {
+        "ok": False,
+        "uncertain": True,
+        "message": (
+            "X publish outcome is unknown: no CreateTweet response or success UI was "
+            "observed. Do not retry automatically; check the profile first."
+        ),
+    }
 
 
 def run_publish(context, args):
@@ -291,24 +346,24 @@ def run_publish(context, args):
                 "text-only post."
             )
 
+    response_outcome = {}
+    page.on("response", lambda response: track_publish_response(response, response_outcome))
     click_post(page, 180_000 if args.kind == "video" else 30_000)
 
-    sent, url = wait_for_sent(page, args.timeout_ms)
-    if sent:
+    outcome = wait_for_sent(page, box, response_outcome, args.timeout_ms)
+    if outcome.get("ok"):
         result = {
             "ok": True,
             "message": ("Published with %s" % args.kind) if args.kind != "none" else "Published",
         }
-        if url:
-            result["url"] = url
+        if outcome.get("url"):
+            result["url"] = outcome["url"]
         return result
 
     return {
         "ok": False,
-        "message": (
-            "X did not confirm the post before timing out. It may still have posted; check the "
-            "account. If it keeps failing, set X browser headless to false to watch the flow."
-        ),
+        **({"uncertain": True} if outcome.get("uncertain") else {}),
+        "message": outcome.get("message") or "X rejected the post.",
     }
 
 

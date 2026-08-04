@@ -281,8 +281,11 @@ replies with HTTP 400 and a human-readable `error` telling you exactly what to f
 - **HTTP 401** `{ "error": "Unauthorized" }` → password protection is on; add `adminPassword`.
 - **HTTP 403** on `/api/config` → config endpoint is disabled (not local); rely on
   `platforms` you were told, or `/api/readiness`.
-- **Per-account `ok:false`** (e.g. X rate limit / "daily limit … (344)") → that platform
-  rejected it; report the `message`. Other platforms in the same request may still succeed.
+- **Per-account `ok:false`** (e.g. X rate limit / "daily limit … (344)") → report the
+  `message`. Other platforms in the same request may still succeed.
+- **Per-account `uncertain:true`** → the browser flow could not verify whether the post is
+  live. **Do not retry it.** Check the profile manually first; retrying an uncertain result
+  can create a duplicate.
 
 Never claim a post succeeded unless the corresponding `results[].ok` is `true`.
 

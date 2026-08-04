@@ -9,8 +9,13 @@ rather than a raw Playwright error.
 import argparse
 import os
 import re
+import time
 from pathlib import Path
 
+from browser_publish_verification import (
+    classify_instagram_publish_response,
+    is_instagram_publish_response,
+)
 from instagram_browser_lib import (
     HOME_URL,
     emit,
@@ -249,14 +254,94 @@ def share_post(page):
         ) from exc
 
 
-def wait_for_share_complete(page, timeout_ms):
+def track_publish_response(response, outcome, kind):
+    """Capture Instagram's definitive media configure web response."""
     try:
-        page.get_by_text(
-            re.compile("has been shared|post shared|reel shared", re.I)
-        ).first.wait_for(state="visible", timeout=timeout_ms)
-        return True
+        method = response.request.method
+        url = response.url
     except Exception:
-        return False
+        return
+
+    if not is_instagram_publish_response(url, method):
+        return
+
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+
+    classified = classify_instagram_publish_response(
+        url, method, response.status, payload, kind
+    )
+
+    if classified is not None:
+        outcome.clear()
+        outcome.update(classified)
+
+
+def share_ui_outcome(page):
+    try:
+        success = page.get_by_text(
+            re.compile("has been shared|post shared|reel shared", re.I)
+        ).first
+        if success.is_visible(timeout=250):
+            return {"ok": True, "message": "Instagram confirmed the post."}
+    except Exception:
+        pass
+
+    try:
+        failure = page.get_by_text(
+            re.compile("couldn't share|could not share|try again|went wrong|failed", re.I)
+        ).first
+        if failure.is_visible(timeout=250):
+            message = failure.inner_text(timeout=1000).strip()
+            return {"ok": False, "message": message or "Instagram rejected the post."}
+    except Exception:
+        pass
+
+    return None
+
+
+def wait_for_share_complete(page, share_dialog, response_outcome, timeout_ms):
+    """Wait for Instagram's publish response, with dialog state as a fallback."""
+    deadline = time.monotonic() + max(timeout_ms, 10_000) / 1000
+    dialog_closed_at = None
+
+    while time.monotonic() < deadline:
+        if response_outcome:
+            return dict(response_outcome)
+
+        ui_outcome = share_ui_outcome(page)
+        if ui_outcome is not None:
+            return ui_outcome
+
+        try:
+            dialog_visible = share_dialog.is_visible(timeout=250)
+        except Exception:
+            dialog_visible = False
+
+        if not dialog_visible:
+            dialog_closed_at = dialog_closed_at or time.monotonic()
+            # Instagram removes the create dialog after a successful share. Wait
+            # briefly for the configure response before trusting that fallback.
+            if time.monotonic() - dialog_closed_at >= 2:
+                return {
+                    "ok": True,
+                    "message": "Instagram closed the create dialog after sharing.",
+                }
+        else:
+            dialog_closed_at = None
+
+        page.wait_for_timeout(250)
+
+    return {
+        "ok": False,
+        "uncertain": True,
+        "message": (
+            "Instagram publish outcome is unknown: no configure response or success UI was "
+            "observed. Do not retry automatically; check the profile first."
+        ),
+    }
 
 
 def select_reel_aspect_916(page):
@@ -401,30 +486,30 @@ def run_publish(context, args):
         return {"ok": True, "message": "DEBUG: stopped before Share (no post made)."}
 
     fill_caption(page, args.caption)
+    share_dialog = page.locator('[role="dialog"]:visible').last
+    response_outcome = {}
+    page.on(
+        "response",
+        lambda response: track_publish_response(response, response_outcome, args.kind),
+    )
     share_post(page)
 
-    if wait_for_share_complete(page, args.timeout_ms):
-        # Link to the account profile (folder is named after the account).
-        username = Path(args.user_data_dir).name
-        url = (
-            f"https://www.instagram.com/{username}/"
-            if re.fullmatch(r"[A-Za-z0-9._]{1,30}", username or "") and username != "default"
-            else None
-        )
-
-        return {
+    outcome = wait_for_share_complete(
+        page, share_dialog, response_outcome, args.timeout_ms
+    )
+    if outcome.get("ok"):
+        result = {
             "ok": True,
             "message": f"Published with {args.kind}.",
-            **({"url": url} if url else {}),
         }
+        if outcome.get("url"):
+            result["url"] = outcome["url"]
+        return result
 
     return {
         "ok": False,
-        "message": (
-            "Instagram did not confirm the post before timing out. It may still publish; "
-            "check the account. If it keeps failing, set Instagram browser headless to false "
-            "to watch the flow."
-        ),
+        **({"uncertain": True} if outcome.get("uncertain") else {}),
+        "message": outcome.get("message") or "Instagram rejected the post.",
     }
 
 

@@ -3250,8 +3250,10 @@ export default function Home() {
                   <div className="result" key={result.targetId || `${result.platform}:${index}`}>
                     <div className="result-head">
                       <strong>{resultLabel}</strong>
-                      <span className={`badge ${result.ok ? "ok" : "err"}`}>
-                        {result.ok ? "ok" : "error"}
+                      <span
+                        className={`badge ${result.ok ? "ok" : result.uncertain ? "unknown" : "err"}`}
+                      >
+                        {result.ok ? "ok" : result.uncertain ? "check" : "error"}
                       </span>
                     </div>
                     <p>{result.message}</p>
@@ -3271,6 +3273,7 @@ export default function Home() {
               <div className="result-list" aria-label="Published posts">
                 {publishedPosts.map((post) => {
                   const okCount = post.results.filter((result) => result.ok).length;
+                  const uncertainCount = post.results.filter((result) => result.uncertain).length;
                   const preview = post.text.trim();
                   const heading = post.title?.trim();
 
@@ -3281,8 +3284,11 @@ export default function Home() {
                           {heading ? <strong>{heading}</strong> : null}
                           <time className="history-time">{formatDateTime(post.createdAt)}</time>
                         </div>
-                        <span className={`badge ${okCount > 0 ? "ok" : "err"}`}>
+                        <span
+                          className={`badge ${okCount > 0 ? "ok" : uncertainCount > 0 ? "unknown" : "err"}`}
+                        >
                           {okCount}/{post.results.length} ok
+                          {uncertainCount > 0 ? ` · ${uncertainCount} check` : ""}
                         </span>
                       </div>
                       {preview ? <p className="history-preview">{preview}</p> : null}
@@ -3322,7 +3328,9 @@ export default function Home() {
                       <div className="history-platforms">
                         {post.results.map((result, index) => {
                           const channel = channels.find((item) => item.id === result.platform);
-                          const className = `history-platform ${result.ok ? "ok" : "err"}`;
+                          const className = `history-platform ${
+                            result.ok ? "ok" : result.uncertain ? "unknown" : "err"
+                          }`;
                           const channelLabel = channel?.label || result.platform;
                           const label =
                             result.profileLabel && result.profileLabel !== channelLabel

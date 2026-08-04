@@ -1,6 +1,6 @@
 {
   "name": "@apoorvdarshan/crossposter",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "description": "Local-first social publishing dashboard for accounts you control.",
   "license": "MIT",
   "homepage": "https://crossposter.apoorvdarshan.com",
@@ -39,7 +39,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:browser-verification": "python3 -B -m unittest discover -s tests -p 'test_*.py'"
   },
   "dependencies": {
     "image-size": "^2.0.2",

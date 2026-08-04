@@ -518,6 +518,7 @@ export default function ScheduledPage() {
             {selectedDatePosts.map((post) => {
               const canEdit = post.status !== "publishing";
               const okCount = post.results?.filter((result) => result.ok).length || 0;
+              const uncertainCount = post.results?.filter((result) => result.uncertain).length || 0;
               const postTargets: PublishTarget[] = post.targets?.length
                 ? post.targets
                 : post.platforms.map((platform) => ({ id: platform, platform }));
@@ -573,6 +574,7 @@ export default function ScheduledPage() {
                     <div className="scheduled-results">
                       <strong>
                         Result: {okCount}/{post.results.length} ok
+                        {uncertainCount > 0 ? ` · ${uncertainCount} check` : ""}
                       </strong>
                       <div className="history-platforms">
                         {post.results.map((result, index) => {
@@ -589,7 +591,9 @@ export default function ScheduledPage() {
 
                           return result.url ? (
                             <a
-                              className={`history-platform ${result.ok ? "ok" : "err"}`}
+                              className={`history-platform ${
+                                result.ok ? "ok" : result.uncertain ? "unknown" : "err"
+                              }`}
                               href={result.url}
                               key={result.targetId || `${result.platform}:${index}`}
                               rel="noreferrer"
@@ -600,7 +604,9 @@ export default function ScheduledPage() {
                             </a>
                           ) : (
                             <span
-                              className={`history-platform ${result.ok ? "ok" : "err"}`}
+                              className={`history-platform ${
+                                result.ok ? "ok" : result.uncertain ? "unknown" : "err"
+                              }`}
                               key={result.targetId || `${result.platform}:${index}`}
                               title={result.message}
                             >

@@ -269,6 +269,11 @@ invisibly; set it to `false` to watch the browser if X changes its layout or
 shows a checkpoint. Click **Log in to X** in Settings once to sign in (including
 2FA); the session is reused for every post after.
 
+After clicking Post, Crossposter verifies X's own `CreateTweet` response and
+captures the new status URL. If neither the response nor the success UI can be
+observed, the result is marked **check** rather than failed; inspect the profile
+before retrying because the post may already be live.
+
 Set `X_PREMIUM_LONG_POSTS=true` only for Premium accounts. It raises the X text
 limit from 280 to 25,000 characters (X Premium long posts) and the video size
 limit from 512 MB to 16 GB. Free accounts keep the 280 character limit.
@@ -414,6 +419,11 @@ saved into that folder and reused headlessly afterward. To add another account,
 add another profile with its own folder and log in again. If Instagram changes
 its create-post layout and a publish fails, set `INSTAGRAM_BROWSER_HEADLESS` to
 `false` to watch the flow.
+
+After clicking Share, Crossposter verifies Instagram's media-configure response
+and uses its shortcode as the post/reel URL when available. If confirmation
+cannot be observed, the result is marked **check** and must be verified on the
+profile before any retry.
 
 Supported media:
 

@@ -84,6 +84,8 @@ export async function runScheduledTick(requestUrl = "http://localhost:2004/api/s
         if (ok) {
           removeScheduledPost(locked.id);
         } else {
+          const uncertain = result.results.some((item) => item.uncertain);
+
           updateScheduledPost(locked.id, (current) => ({
             ...current,
             status: "failed",
@@ -91,7 +93,9 @@ export async function runScheduledTick(requestUrl = "http://localhost:2004/api/s
             updatedAt: completedAt,
             ...(result.publishedPost ? { publishedPostId: result.publishedPost.id } : {}),
             results: result.results,
-            lastError: "No selected channel published successfully."
+            lastError: uncertain
+              ? "Publish outcome is unknown. Check the profile before rescheduling; it may already be live."
+              : "No selected channel published successfully."
           }));
         }
       } catch (error) {

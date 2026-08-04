@@ -34,6 +34,7 @@ export type PublishResult = {
   profileId?: string;
   profileLabel?: string;
   ok: boolean;
+  uncertain?: boolean;
   message: string;
   url?: string;
 };

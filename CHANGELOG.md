@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.12
+
+- Fix false X and Instagram failures after a post was already live. The browser publishers now listen for X's `CreateTweet`/`CreateNoteTweet` response and Instagram's media-configure response, capture the resulting permalink when available, and close immediately after a definitive result instead of relying only on transient toast text.
+- Track genuinely unverifiable browser outcomes as **check** (amber) rather than a definitive error. The API marks them with `uncertain: true`, the message explicitly says not to retry automatically, and scheduled posts remain stopped for manual verification instead of risking a duplicate.
+- Add offline response-classification tests for successful posts, provider rejections, permalinks, and unrelated network traffic. The release workflow runs them before publishing to npm.
+
 ## 1.1.11
 
 - Release automation: pushing a `vX.Y.Z` tag now publishes to npm **and** automatically creates the matching GitHub release, with notes pulled from this changelog. Previously npm publishing was tied to manually publishing a GitHub release.
@@ -71,4 +77,3 @@
 - Add a calendar view to `/scheduled` that opens on the current month.
 - Mark dates with scheduled posts and filter the queue by the selected date.
 - Keep scheduler queue actions for rescheduling and discarding posts below the calendar.
-

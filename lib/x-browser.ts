@@ -9,6 +9,7 @@ export const defaultXBrowserTimeoutMs = 180_000;
 
 export type XRunnerResult = {
   ok?: boolean;
+  uncertain?: boolean;
   message?: string;
   url?: string;
 };
@@ -100,7 +101,11 @@ export async function runXScript(
             parsed?.message ||
             trimOutput([stderr, stdout, error?.message].filter(Boolean).join(" "));
 
-          reject(new Error(detail || "X browser command failed."));
+          const failure = new Error(detail || "X browser command failed.") as Error & {
+            uncertain?: boolean;
+          };
+          failure.uncertain = parsed?.uncertain === true;
+          reject(failure);
           return;
         }
 

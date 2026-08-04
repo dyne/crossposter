@@ -2016,6 +2016,12 @@ code {
   color: var(--danger);
 }
 
+.badge.unknown {
+  border-color: color-mix(in srgb, #e5a93d 55%, var(--line));
+  background: color-mix(in srgb, #e5a93d 16%, transparent);
+  color: color-mix(in srgb, #e5a93d 78%, var(--text));
+}
+
 .result p {
   margin: 8px 0 0;
   overflow-wrap: anywhere;
@@ -2161,6 +2167,12 @@ a.history-platform.ok:hover {
   border-color: var(--danger-line);
   background: var(--danger-wash);
   color: var(--danger);
+}
+
+.history-platform.unknown {
+  border-color: color-mix(in srgb, #e5a93d 48%, var(--line));
+  background: color-mix(in srgb, #e5a93d 12%, transparent);
+  color: color-mix(in srgb, #e5a93d 78%, var(--text));
 }
 
 .config-groups {

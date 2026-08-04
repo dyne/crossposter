@@ -9,6 +9,7 @@ export const defaultInstagramBrowserTimeoutMs = 180_000;
 
 export type InstagramRunnerResult = {
   ok?: boolean;
+  uncertain?: boolean;
   message?: string;
   url?: string;
 };
@@ -101,7 +102,11 @@ export async function runInstagramScript(
             parsed?.message ||
             trimOutput([stderr, stdout, error?.message].filter(Boolean).join(" "));
 
-          reject(new Error(detail || "Instagram browser command failed."));
+          const failure = new Error(detail || "Instagram browser command failed.") as Error & {
+            uncertain?: boolean;
+          };
+          failure.uncertain = parsed?.uncertain === true;
+          reject(failure);
           return;
         }
 

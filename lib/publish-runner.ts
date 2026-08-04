@@ -138,12 +138,18 @@ export async function runPublish(input: PublishRunInput): Promise<PublishRunResu
           profileLabel: result.profileLabel || target.profileLabel
         };
       } catch (error) {
+        const uncertain =
+          error instanceof Error &&
+          "uncertain" in error &&
+          (error as Error & { uncertain?: boolean }).uncertain === true;
+
         return {
           platform: target.platform,
           targetId: target.id,
           profileId: target.profileId,
           profileLabel: target.profileLabel,
           ok: false,
+          ...(uncertain ? { uncertain: true } : {}),
           message: error instanceof Error ? error.message : "Unknown error"
         };
       }
