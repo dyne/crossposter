@@ -26,10 +26,10 @@ test("renderStarHistorySvg creates Crossposter light and dark charts", () => {
 
   assert.match(light, /Crossposter GitHub star history/);
   assert.match(light, /3 GitHub stars over time/);
-  assert.match(light, /fill="#FBFEFC"/);
-  assert.match(dark, /fill="#0C120F"/);
+  assert.match(light, /Crossposter is spreading!/);
+  assert.match(dark, /compose once/);
   assert.match(dark, /linearGradient id="line-gradient"/);
-  assert.match(dark, /Compose once\. Publish everywhere\./);
+  assert.match(dark, /filter id="soft-sketch"/);
 });
 
 test("fetchStarHistory paginates, authenticates optionally, and sorts", async () => {
