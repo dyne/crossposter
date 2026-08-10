@@ -712,6 +712,16 @@ Before exposing it publicly:
 Do not post API keys, tokens, app secrets, or private account details in public
 issues.
 
+## Star History
+
+<a href="https://github.com/apoorvdarshan/crossposter/stargazers">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=dark&amp;v=1" />
+    <source media="(prefers-color-scheme: light)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=1" />
+    <img alt="Crossposter GitHub star history" src="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=1" />
+  </picture>
+</a>
+
 ## License
 
 MIT

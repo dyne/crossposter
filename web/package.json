@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node build.mjs",
     "deploy": "npm run build && wrangler deploy",
-    "dev": "npm run build && wrangler dev"
+    "dev": "npm run build && wrangler dev",
+    "test:worker": "node --test worker/*.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.110.0"
