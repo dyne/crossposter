@@ -716,9 +716,9 @@ issues.
 
 <a href="https://github.com/apoorvdarshan/crossposter/stargazers">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=dark&amp;v=2" />
-    <source media="(prefers-color-scheme: light)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=2" />
-    <img alt="Crossposter GitHub star history" src="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=2" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=dark&amp;v=3" />
+    <source media="(prefers-color-scheme: light)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=3" />
+    <img alt="Crossposter GitHub star history" src="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=3" />
   </picture>
 </a>
 
