@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.14
+
+- Check the npm registry directly for the latest release instead of spawning the `npm` executable, so Homebrew services can report updates even with launchd's minimal `PATH`.
+
 ## 1.1.13
 
 - Add a Homebrew-managed production installation with a stable local data directory, `brew services` support, and package-manager-aware update guidance.

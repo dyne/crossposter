@@ -67,17 +67,35 @@ async function readPackageJson(): Promise<PackageJson> {
 
 async function latestVersion(packageName: string): Promise<{ version: string; error: string }> {
   try {
-    const { stdout } = await execFileAsync("npm", ["view", packageName, "version"], {
-      timeout: 8000
-    });
+    const response = await fetch(
+      `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`,
+      {
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000)
+      }
+    );
 
-    return { version: stdout.trim(), error: "" };
+    if (!response.ok) {
+      return {
+        version: "",
+        error: `npm registry returned HTTP ${response.status}.`
+      };
+    }
+
+    const latest = (await response.json()) as PackageJson;
+    const version = latest.version?.trim() || "";
+
+    if (!version) {
+      return { version: "", error: "npm registry did not return a version." };
+    }
+
+    return { version, error: "" };
   } catch (error) {
     const maybeError = error as { message?: string; stderr?: string };
 
     return {
       version: "",
-      error: maybeError.stderr?.trim() || maybeError.message || "Could not check npm."
+      error: maybeError.message || "Could not check npm."
     };
   }
 }
