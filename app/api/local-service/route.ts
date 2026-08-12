@@ -9,8 +9,18 @@ import { appPath, appRoot, dataRoot } from "@/lib/runtime-paths";
 export const runtime = "nodejs";
 
 const execFileAsync = promisify(execFile);
-const label = "com.apoorvdarshan.crossposter";
+const legacyLabel = "com.apoorvdarshan.crossposter";
+const homebrewLabel = "homebrew.mxcl.crossposter";
+const homebrewFormula = "apoorvdarshan/tap/crossposter";
 const defaultPort = "2004";
+
+function managedByHomebrew(): boolean {
+  return process.env.CROSSPOSTER_INSTALL_SOURCE === "homebrew";
+}
+
+function serviceLabel(): string {
+  return managedByHomebrew() ? homebrewLabel : legacyLabel;
+}
 
 function isConfigUiAllowed(): boolean {
   return process.env.NODE_ENV !== "production" || process.env.POSTER_ENABLE_CONFIG_UI === "true";
@@ -32,7 +42,7 @@ function homeDir(): string {
   return process.env.HOME || "";
 }
 
-function plistPath(): string {
+function plistPath(label = serviceLabel()): string {
   return path.join(homeDir(), "Library", "LaunchAgents", `${label}.plist`);
 }
 
@@ -49,7 +59,7 @@ function launchTarget(): string | null {
     return null;
   }
 
-  return `gui/${process.getuid()}/${label}`;
+  return `gui/${process.getuid()}/${serviceLabel()}`;
 }
 
 async function isServiceRunning(): Promise<boolean> {
@@ -72,9 +82,12 @@ async function serviceSnapshot() {
 
   return {
     supported,
-    label,
+    label: serviceLabel(),
+    manager: managedByHomebrew() ? "homebrew" : "launchd",
     plistPath: supported ? plistPath() : "",
     installed: supported ? existsSync(plistPath()) : false,
+    legacyServiceInstalled:
+      supported && managedByHomebrew() ? existsSync(plistPath(legacyLabel)) : false,
     running: supported ? await isServiceRunning() : false,
     port: localPort()
   };
@@ -109,8 +122,29 @@ export async function POST() {
     return NextResponse.json(snapshot);
   }
 
+  if (managedByHomebrew() && snapshot.legacyServiceInstalled) {
+    return NextResponse.json(
+      {
+        ...snapshot,
+        error:
+          "A legacy Crossposter LaunchAgent already exists. Disable it before starting the Homebrew service to avoid two servers using the same port."
+      },
+      { status: 409 }
+    );
+  }
+
   try {
     const port = snapshot.port;
+
+    if (managedByHomebrew()) {
+      const brew = process.env.CROSSPOSTER_BREW_EXECUTABLE || "brew";
+      await execFileAsync(brew, ["services", "start", homebrewFormula], {
+        timeout: 120000,
+        env: process.env
+      });
+
+      return NextResponse.json(await serviceSnapshot());
+    }
 
     await execFileAsync(repoPath("scripts/install-local-service.sh"), [port], {
       cwd: appRoot(),
@@ -143,6 +177,16 @@ export async function DELETE() {
   }
 
   try {
+    if (managedByHomebrew()) {
+      const brew = process.env.CROSSPOSTER_BREW_EXECUTABLE || "brew";
+      await execFileAsync(brew, ["services", "stop", homebrewFormula], {
+        timeout: 120000,
+        env: process.env
+      });
+
+      return NextResponse.json(await serviceSnapshot());
+    }
+
     await execFileAsync(repoPath("scripts/uninstall-local-service.sh"), [], {
       cwd: appRoot()
     });

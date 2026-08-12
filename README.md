@@ -1,4 +1,9 @@
 <p align="center">
+  <a href="https://github.com/apoorvdarshan/homebrew-tap"><img alt="Homebrew" src="https://img.shields.io/badge/Homebrew-tap-FBB040?logo=homebrew&amp;logoColor=black"></a>
+  <a href="https://www.npmjs.com/package/@apoorvdarshan/crossposter"><img alt="npm" src="https://img.shields.io/npm/v/@apoorvdarshan/crossposter?logo=npm"></a>
+</p>
+
+<p align="center">
   <img src="https://crossposter.apoorvdarshan.com/assets/logo-crossposter.png" alt="Crossposter logo" width="120" height="120">
 </p>
 
@@ -124,7 +129,34 @@ can hand to an agent so it can post through your running server on
 
 ## Run Locally
 
-### Recommended: npx Launcher
+### Recommended: Homebrew
+
+Install the production build and launch it locally:
+
+```bash
+brew install apoorvdarshan/tap/crossposter
+crossposter
+```
+
+Homebrew keeps the application code under its managed prefix. Crossposter keeps
+config, uploads, browser sessions, schedules, and history separately in
+`~/Library/Application Support/Crossposter` on macOS, so upgrading or
+uninstalling the Formula does not erase local publishing data.
+
+Start it automatically after login:
+
+```bash
+brew services start crossposter
+```
+
+Upgrade without changing local data:
+
+```bash
+brew upgrade apoorvdarshan/tap/crossposter
+brew services restart crossposter
+```
+
+### npx Launcher
 
 Use the npx path when you want Crossposter running on localhost without cloning
 the repo or installing a global binary:
@@ -167,8 +199,9 @@ npm run dev:local
 
 ### Update The Local Package
 
-Crossposter checks npm on startup by default. You can also update manually from
-Settings > Version & Updates, or run:
+Homebrew installations are updated only through Homebrew. npm and npx
+installations check npm on startup by default and can also update from Settings
+> Version & Updates, or run:
 
 ```bash
 npx @apoorvdarshan/crossposter@latest
@@ -188,7 +221,13 @@ POSTER_LOCAL_PORT=2080 npx @apoorvdarshan/crossposter@latest
 
 ### macOS Auto-Start
 
-Install the launchd service:
+For a Homebrew installation, use Homebrew's managed service:
+
+```bash
+brew services start crossposter
+```
+
+For an npm or npx installation, install Crossposter's launchd service:
 
 ```bash
 crossposter install-service
@@ -212,6 +251,8 @@ crossposter install-service --port 2080
 Remove the service:
 
 ```bash
+brew services stop crossposter
+# npm/npx installation:
 crossposter uninstall-service
 ```
 

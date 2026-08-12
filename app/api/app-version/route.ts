@@ -36,6 +36,12 @@ function compareVersions(a: string, b: string): number {
 }
 
 function installSource(root: string): string {
+  const declaredSource = process.env.CROSSPOSTER_INSTALL_SOURCE?.trim();
+
+  if (declaredSource) {
+    return declaredSource;
+  }
+
   if (/[/\\](?:_npx|\.npm[/\\]_npx)[/\\]/.test(root)) {
     return "npx";
   }
@@ -82,7 +88,9 @@ async function snapshot(extra: Record<string, unknown> = {}) {
   const currentVersion = pkg.version || "0.0.0";
   const latest = await latestVersion(packageName);
   const config = readLocalConfig();
-  const autoUpdate = config.values.POSTER_AUTO_UPDATE !== "false";
+  const source = installSource(appRoot());
+  const managedByHomebrew = source === "homebrew";
+  const autoUpdate = !managedByHomebrew && config.values.POSTER_AUTO_UPDATE !== "false";
 
   return {
     packageName,
@@ -91,10 +99,13 @@ async function snapshot(extra: Record<string, unknown> = {}) {
     latestError: latest.error,
     updateAvailable: Boolean(latest.version) && compareVersions(latest.version, currentVersion) > 0,
     autoUpdate,
-    installSource: installSource(appRoot()),
+    managedByHomebrew,
+    installSource: source,
     appRoot: appRoot(),
     dataRoot: dataRoot(),
-    updateCommand: `npx ${packageName}@latest`,
+    updateCommand: managedByHomebrew
+      ? "brew upgrade apoorvdarshan/tap/crossposter"
+      : `npx ${packageName}@latest`,
     ...extra
   };
 }
@@ -130,6 +141,18 @@ export async function POST() {
         message: before.latestError || "Could not check npm before updating."
       },
       { status: 502 }
+    );
+  }
+
+  if (before.managedByHomebrew) {
+    return NextResponse.json(
+      {
+        ...before,
+        ok: false,
+        method: "homebrew",
+        message: `Update this installation with: ${before.updateCommand}`
+      },
+      { status: 409 }
     );
   }
 

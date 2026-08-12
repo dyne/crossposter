@@ -107,7 +107,7 @@
                 "name": "Is Crossposter free?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes. Crossposter is free and open source under the MIT license. Run it locally with npx @apoorvdarshan/crossposter@latest — there is no account, subscription, or paid tier."
+                  "text": "Yes. Crossposter is free and open source under the MIT license. Install it with brew install apoorvdarshan/tap/crossposter or run it with npx — there is no account, subscription, or paid tier."
                 }
               },
               {
@@ -230,7 +230,7 @@
               <span>Terminal</span>
               <button class="copy-button" type="button" data-copy-target="hero-install-command">Copy</button>
             </div>
-            <pre><code id="hero-install-command">npx @apoorvdarshan/crossposter@latest</code></pre>
+            <pre><code id="hero-install-command">brew install apoorvdarshan/tap/crossposter</code></pre>
           </div>
         </div>
 
@@ -293,7 +293,8 @@
             <span>Terminal</span>
             <button class="copy-button" type="button" data-copy-target="install-commands">Copy</button>
           </div>
-          <pre><code id="install-commands">npx @apoorvdarshan/crossposter@latest</code></pre>
+          <pre><code id="install-commands">brew install apoorvdarshan/tap/crossposter
+crossposter</code></pre>
         </div>
       </section>
 
@@ -316,7 +317,7 @@
         </aside>
 
         <div class="docs-content">
-          <section id="start" class="doc-section" data-search="start quickstart install npm localhost local">
+          <section id="start" class="doc-section" data-search="start quickstart install homebrew brew npm npx localhost local">
             <div class="section-kicker">Quickstart</div>
             <h2>Run Crossposter locally.</h2>
             <p>
@@ -328,7 +329,7 @@
               <article>
                 <span>01</span>
                 <strong>Run</strong>
-                <p>Start with <code>npx @apoorvdarshan/crossposter@latest</code> and open localhost.</p>
+                <p>Install with <code>brew install apoorvdarshan/tap/crossposter</code>, run <code>crossposter</code>, and open localhost.</p>
               </article>
               <article>
                 <span>02</span>
@@ -343,17 +344,17 @@
             </div>
             <div class="command-grid">
               <article>
-                <span>Persistent install</span>
-                <pre><code>npm install -g @apoorvdarshan/crossposter
+                <span>Homebrew · recommended</span>
+                <pre><code>brew install apoorvdarshan/tap/crossposter
 crossposter</code></pre>
               </article>
               <article>
                 <span>Auto-start on macOS</span>
-                <pre><code>crossposter install-service
-crossposter uninstall-service</code></pre>
+                <pre><code>brew services start crossposter
+brew services stop crossposter</code></pre>
               </article>
               <article>
-                <span>Update anytime</span>
+                <span>Run without installing</span>
                 <pre><code>npx @apoorvdarshan/crossposter@latest</code></pre>
               </article>
             </div>
@@ -527,7 +528,7 @@ crossposter uninstall-service</code></pre>
             <div class="split-list">
               <article>
                 <h3>Is Crossposter free?</h3>
-                <p>Yes. Crossposter is free and open source under the MIT license. Run it locally with <code>npx @apoorvdarshan/crossposter@latest</code> — there is no account, subscription, or paid tier.</p>
+                <p>Yes. Crossposter is free and open source under the MIT license. Install it with <code>brew install apoorvdarshan/tap/crossposter</code> or run it with npx — there is no account, subscription, or paid tier.</p>
               </article>
               <article>
                 <h3>Which social media platforms does it support?</h3>
@@ -594,6 +595,7 @@ crossposter uninstall-service</code></pre>
 
     <footer class="site-footer">
       <span>Crossposter</span>
+      <a href="https://github.com/apoorvdarshan/homebrew-tap" rel="noreferrer" target="_blank">Homebrew</a>
       <a href="https://github.com/apoorvdarshan/crossposter" rel="noreferrer" target="_blank">GitHub</a>
       <a href="https://github.com/apoorvdarshan/crossposter/issues/new" rel="noreferrer" target="_blank">Report issue</a>
       <a href="https://ko-fi.com/apoorvdarshan" rel="noreferrer" target="_blank">Ko-fi</a>

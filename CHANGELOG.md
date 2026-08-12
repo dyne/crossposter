@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.13
+
+- Add a Homebrew-managed production installation with a stable local data directory, `brew services` support, and package-manager-aware update guidance.
+- Keep npm/npx behavior compatible while preventing Homebrew installations from silently bypassing Homebrew through the npm self-updater.
+- Prevent Homebrew auto-start from being enabled alongside Crossposter's legacy LaunchAgent, avoiding duplicate servers on the same port.
+- Make Homebrew the recommended persistent installation in the README and website while retaining npx as the no-install option.
+
 ## 1.1.12
 
 - Fix false X and Instagram failures after a post was already live. The browser publishers now listen for X's `CreateTweet`/`CreateNoteTweet` response and Instagram's media-configure response, capture the resulting permalink when available, and close immediately after a definitive result instead of relying only on transient toast text.

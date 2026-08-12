@@ -204,7 +204,11 @@ async function latestNpmVersion() {
 }
 
 async function maybeRelaunchLatest(dataRoot, config) {
-  if (hasArg("--no-update") || process.env.CROSSPOSTER_NO_UPDATE === "true") {
+  if (
+    hasArg("--no-update") ||
+    process.env.CROSSPOSTER_NO_UPDATE === "true" ||
+    process.env.CROSSPOSTER_INSTALL_SOURCE === "homebrew"
+  ) {
     return false;
   }
 
@@ -281,8 +285,12 @@ function startNext(port, dataRoot, dotEnvValues) {
     process.platform === "win32" ? "next.cmd" : "next"
   );
   const command = existsSync(nextBin) ? nextBin : "next";
-  const host = readArg("--host") || process.env.HOSTNAME || "0.0.0.0";
-  const child = spawn(command, ["dev", "--hostname", host, "--port", port], {
+  const host = readArg("--host") || process.env.POSTER_HOST || "0.0.0.0";
+  const productionBuild = path.join(packageRoot, ".next", "BUILD_ID");
+  const runProduction =
+    process.env.CROSSPOSTER_RUN_MODE === "production" && existsSync(productionBuild);
+  const nextCommand = runProduction ? "start" : "dev";
+  const child = spawn(command, [nextCommand, "--hostname", host, "--port", port], {
     cwd: packageRoot,
     env: {
       ...dotEnvValues,

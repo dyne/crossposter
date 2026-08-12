@@ -60,8 +60,10 @@ type StorageResponse = {
 type LocalServiceResponse = {
   supported: boolean;
   label: string;
+  manager?: string;
   plistPath: string;
   installed: boolean;
+  legacyServiceInstalled?: boolean;
   running: boolean;
   port: string;
   error?: string;
@@ -85,6 +87,7 @@ type AppVersionResponse = {
   latestError: string;
   updateAvailable: boolean;
   autoUpdate: boolean;
+  managedByHomebrew: boolean;
   installSource: string;
   appRoot: string;
   dataRoot: string;
@@ -668,7 +671,8 @@ export default function SettingsClient({ initialView = "settings" }: { initialVi
 
     return displayTailscaleHost ? `http://${displayTailscaleHost}:${normalizedPort}` : "";
   }, [displayTailscaleHost, tailscale?.port, values.POSTER_LOCAL_PORT]);
-  const autoUpdateEnabled = values.POSTER_AUTO_UPDATE !== "false";
+  const managedByHomebrew = Boolean(appVersion?.managedByHomebrew);
+  const autoUpdateEnabled = !managedByHomebrew && values.POSTER_AUTO_UPDATE !== "false";
   const versionSummary = useMemo(() => {
     if (!appVersion) {
       return "Checking the installed Crossposter package.";
@@ -682,8 +686,10 @@ export default function SettingsClient({ initialView = "settings" }: { initialVi
       return `Update available: ${appVersion.latestVersion}. Restart after updating.`;
     }
 
-    return "You are on the latest version published to npm.";
-  }, [appVersion]);
+    return managedByHomebrew
+      ? "You are on the latest version available to Homebrew."
+      : "You are on the latest version published to npm.";
+  }, [appVersion, managedByHomebrew]);
   const versionActionIsUpdate = Boolean(appVersion?.updateAvailable);
   const versionActionBusy = isUpdatingApp || isCheckingAppVersion;
   const versionAlreadyCurrent = Boolean(
@@ -723,6 +729,10 @@ export default function SettingsClient({ initialView = "settings" }: { initialVi
 
     if (!localService.supported) {
       return "macOS LaunchAgent controls are not available on this system.";
+    }
+
+    if (localService.manager === "homebrew" && localService.legacyServiceInstalled) {
+      return "A legacy Crossposter LaunchAgent is installed. Remove it before enabling the Homebrew service.";
     }
 
     if (localService.installed && localService.running) {
@@ -1956,25 +1966,29 @@ export default function SettingsClient({ initialView = "settings" }: { initialVi
                 <p>{versionSummary}</p>
                 <div className="tailscale-status-grid">
                   <div>
-                    <span>Latest npm</span>
+                    <span>Latest release</span>
                     <strong>{appVersion?.latestVersion || "Unknown"}</strong>
                     <small>{appVersion?.installSource || "local"} install source</small>
                   </div>
                   <div>
-                    <span>Run shortcut</span>
+                    <span>Update command</span>
                     <code>{appVersion?.updateCommand || "npx @apoorvdarshan/crossposter@latest"}</code>
-                    <small>Uses this folder for local config and uploads.</small>
+                    <small>Updates the app without changing local config or uploads.</small>
                   </div>
                 </div>
                 <div className="service-switch-row app-update-row">
                   <div>
-                    <span>Auto-update</span>
-                    <strong>Check npm when Crossposter starts</strong>
+                    <span>{managedByHomebrew ? "Package updates" : "Auto-update"}</span>
+                    <strong>
+                      {managedByHomebrew
+                        ? "Managed by Homebrew"
+                        : "Check npm when Crossposter starts"}
+                    </strong>
                   </div>
                   <button
                     aria-pressed={autoUpdateEnabled}
                     className={`service-switch ${autoUpdateEnabled ? "is-on" : ""}`}
-                    disabled={isTogglingAutoUpdate}
+                    disabled={isTogglingAutoUpdate || managedByHomebrew}
                     type="button"
                     onClick={() => void toggleAutoUpdate(!autoUpdateEnabled)}
                   >
@@ -1985,8 +1999,9 @@ export default function SettingsClient({ initialView = "settings" }: { initialVi
                   </button>
                 </div>
                 <p>
-                  Auto-update is on by default. A running app still needs a restart after a package
-                  update so the new code can boot.
+                  {managedByHomebrew
+                    ? "Run the Homebrew update command above, then restart Crossposter so the new code can boot."
+                    : "Auto-update is on by default. A running app still needs a restart after a package update so the new code can boot."}
                 </p>
                 <div className="inline-actions">
                   <button
