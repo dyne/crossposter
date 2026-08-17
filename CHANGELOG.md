@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.15
+
+- Honor the local `POSTER_REQUIRE_ADMIN_PASSWORD` and `POSTER_ADMIN_PASSWORD` settings when publishing, so Homebrew production builds work on localhost with password protection disabled while public deployments can still require it.
+
 ## 1.1.14
 
 - Check the npm registry directly for the latest release instead of spawning the `npm` executable, so Homebrew services can report updates even with launchd's minimal `PATH`.
