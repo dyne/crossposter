@@ -188,11 +188,12 @@ function validationMessage(error: z.ZodError): string {
 }
 
 export async function POST(request: Request) {
+  const requirePasswordSetting = getConfigValue("POSTER_REQUIRE_ADMIN_PASSWORD");
   const requiresPassword =
-    process.env.POSTER_REQUIRE_ADMIN_PASSWORD === "true" ||
+    requirePasswordSetting === "true" ||
     (process.env.NODE_ENV === "production" &&
-      process.env.POSTER_REQUIRE_ADMIN_PASSWORD !== "false");
-  const configuredPassword = process.env.POSTER_ADMIN_PASSWORD;
+      requirePasswordSetting !== "false");
+  const configuredPassword = getConfigValue("POSTER_ADMIN_PASSWORD");
 
   if (requiresPassword && !configuredPassword) {
     return NextResponse.json(
