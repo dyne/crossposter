@@ -13,7 +13,7 @@
   "workers_dev": false,
   "routes": [
     {
-      "pattern": "crossposter.aopv.dev",
+      "pattern": "crossposter.apoorvdarshan.com",
       "custom_domain": true
     }
   ]
