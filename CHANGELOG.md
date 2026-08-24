@@ -24,7 +24,7 @@
 ## 1.1.11
 
 - Release automation: pushing a `vX.Y.Z` tag now publishes to npm **and** automatically creates the matching GitHub release, with notes pulled from this changelog. Previously npm publishing was tied to manually publishing a GitHub release.
-- Static site SEO: add an FAQ section with `FAQPage` structured data and refresh the sitemap `lastmod` to improve search indexing of crossposter.apoorvdarshan.com.
+- Static site SEO: add an FAQ section with `FAQPage` structured data and refresh the sitemap `lastmod` to improve search indexing of crossposter.aopv.dev.
 
 ## 1.1.10
 

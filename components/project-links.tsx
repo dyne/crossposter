@@ -19,15 +19,15 @@ const projectLinks: ProjectLink[] = [
     featured: true
   },
   {
-    href: "https://x.com/apoorvdarshan",
+    href: "https://x.com/aporvv",
     label: "Follow",
-    title: "Follow @apoorvdarshan on X",
+    title: "Follow @aporvv on X",
     simpleIcon: siX
   },
   {
-    href: "https://ko-fi.com/apoorvdarshan",
+    href: "https://ko-fi.com/apv",
     label: "Ko-fi",
-    title: "Support @apoorvdarshan on Ko-fi",
+    title: "Support on Ko-fi",
     icon: Coffee
   },
   {
