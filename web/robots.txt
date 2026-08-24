@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://crossposter.apoorvdarshan.com/sitemap.xml
+Sitemap: https://crossposter.aopv.dev/sitemap.xml

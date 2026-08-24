@@ -12,7 +12,7 @@ type ProjectLink = {
 
 const projectLinks: ProjectLink[] = [
   {
-    href: "https://github.com/apoorvdarshan/crossposter",
+    href: "https://github.com/aopv/crossposter",
     label: "Star",
     title: "Star Crossposter on GitHub",
     icon: Github,

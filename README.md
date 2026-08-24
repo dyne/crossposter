@@ -1,10 +1,10 @@
 <p align="center">
-  <a href="https://github.com/apoorvdarshan/homebrew-tap"><img alt="Homebrew" src="https://img.shields.io/badge/Homebrew-tap-FBB040?logo=homebrew&amp;logoColor=black"></a>
+  <a href="https://github.com/aopv/homebrew-tap"><img alt="Homebrew" src="https://img.shields.io/badge/Homebrew-tap-FBB040?logo=homebrew&amp;logoColor=black"></a>
   <a href="https://www.npmjs.com/package/@apoorvdarshan/crossposter"><img alt="npm" src="https://img.shields.io/npm/v/@apoorvdarshan/crossposter?logo=npm"></a>
 </p>
 
 <p align="center">
-  <img src="https://crossposter.apoorvdarshan.com/assets/logo-crossposter.png" alt="Crossposter logo" width="120" height="120">
+  <img src="https://crossposter.aopv.dev/assets/logo-crossposter.png" alt="Crossposter logo" width="120" height="120">
 </p>
 
 <h1 align="center">Crossposter</h1>
@@ -662,13 +662,13 @@ quickstart, provider setup, limits, privacy, and terms sections. It is intended
 for a domain such as:
 
 ```text
-crossposter.apoorvdarshan.com
+crossposter.aopv.dev
 ```
 
 Live site:
 
 ```text
-https://crossposter.apoorvdarshan.com
+https://crossposter.aopv.dev
 ```
 
 The static site is deployed as a Cloudflare Worker with static assets:
@@ -683,7 +683,7 @@ npx wrangler deploy
 
 Cloudflare Workers Builds watches `web/*` on `main`, runs `npm run build` from
 `web/`, and deploys with `npx wrangler deploy`. Wrangler publishes `web/dist/`
-and routes `crossposter.apoorvdarshan.com` to the Worker.
+and routes `crossposter.aopv.dev` to the Worker.
 
 Files:
 
@@ -746,20 +746,20 @@ Before exposing it publicly:
 - Email: ad13dtu@gmail.com
 - X: https://x.com/apoorvdarshan
 - Product Hunt: https://www.producthunt.com/products/crossposter-2
-- Report an issue: https://github.com/apoorvdarshan/crossposter/issues/new
-- Request a feature: https://github.com/apoorvdarshan/crossposter/issues/new
-- View open issues: https://github.com/apoorvdarshan/crossposter/issues
+- Report an issue: https://github.com/aopv/crossposter/issues/new
+- Request a feature: https://github.com/aopv/crossposter/issues/new
+- View open issues: https://github.com/aopv/crossposter/issues
 
 Do not post API keys, tokens, app secrets, or private account details in public
 issues.
 
 ## Star History
 
-<a href="https://github.com/apoorvdarshan/crossposter/stargazers">
+<a href="https://github.com/aopv/crossposter/stargazers">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=dark&amp;v=3" />
-    <source media="(prefers-color-scheme: light)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=3" />
-    <img alt="Crossposter GitHub star history" src="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=3" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://crossposter.aopv.dev/api/star-history.svg?theme=dark&amp;v=3" />
+    <source media="(prefers-color-scheme: light)" srcset="https://crossposter.aopv.dev/api/star-history.svg?theme=light&amp;v=3" />
+    <img alt="Crossposter GitHub star history" src="https://crossposter.aopv.dev/api/star-history.svg?theme=light&amp;v=3" />
   </picture>
 </a>
 

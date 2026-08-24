@@ -22,8 +22,8 @@ Include:
 
 For non-sensitive bugs and feature requests, use GitHub Issues instead:
 
-- Report an issue: https://github.com/apoorvdarshan/crossposter/issues/new
-- Request a feature: https://github.com/apoorvdarshan/crossposter/issues/new
+- Report an issue: https://github.com/aopv/crossposter/issues/new
+- Request a feature: https://github.com/aopv/crossposter/issues/new
 
 ## Secret Handling
 
