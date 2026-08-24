@@ -92,9 +92,9 @@ Good pull requests should:
 
 Use GitHub Issues for public bug reports and feature requests:
 
-- Report an issue: https://github.com/aopv/crossposter/issues/new
-- Request a feature: https://github.com/aopv/crossposter/issues/new
-- View open issues: https://github.com/aopv/crossposter/issues
+- Report an issue: https://github.com/apoorvdarshan/crossposter/issues/new
+- Request a feature: https://github.com/apoorvdarshan/crossposter/issues/new
+- View open issues: https://github.com/apoorvdarshan/crossposter/issues
 
 Do not include API keys, tokens, secrets, or private account details in a public
 issue. For sensitive security reports, use the email process in `SECURITY.md`.

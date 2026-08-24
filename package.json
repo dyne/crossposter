@@ -3,13 +3,13 @@
   "version": "1.1.15",
   "description": "Local-first social publishing dashboard for accounts you control.",
   "license": "MIT",
-  "homepage": "https://crossposter.aopv.dev",
+  "homepage": "https://crossposter.apoorvdarshan.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aopv/crossposter.git"
+    "url": "git+https://github.com/apoorvdarshan/crossposter.git"
   },
   "bugs": {
-    "url": "https://github.com/aopv/crossposter/issues"
+    "url": "https://github.com/apoorvdarshan/crossposter/issues"
   },
   "bin": {
     "crossposter": "bin/crossposter.mjs"
