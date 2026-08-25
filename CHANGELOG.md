@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.16
+
+- Remove obsolete launch-promotion links from the app header, documentation, structured data, and public website.
+
 ## 1.1.15
 
 - Honor the local `POSTER_REQUIRE_ADMIN_PASSWORD` and `POSTER_ADMIN_PASSWORD` settings when publishing, so Homebrew production builds work on localhost with password protection disabled while public deployments can still require it.
