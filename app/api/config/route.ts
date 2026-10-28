@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { configFields } from "@/lib/config-spec";
+import type { ConfigResponse } from "@/lib/settings/contracts";
 import {
   localConfigPath,
   readLocalConfig,
@@ -35,7 +36,7 @@ export function GET() {
   return NextResponse.json(formatConfigResponse(localConfig));
 }
 
-function formatConfigResponse(localConfig: LocalConfigFile) {
+function formatConfigResponse(localConfig: LocalConfigFile): ConfigResponse {
   const values = Object.fromEntries(
     configFields.map((field) => [
       field.name,
