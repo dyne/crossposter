@@ -12,6 +12,7 @@ import {
 } from "simple-icons";
 import type { CSSProperties } from "react";
 import type { Platform } from "@/lib/types";
+import { platformLabels } from "@/lib/platform-catalog";
 
 const socialIcons: Partial<Record<Platform, SimpleIcon>> = {
   x: siX,
@@ -25,21 +26,7 @@ const socialIcons: Partial<Record<Platform, SimpleIcon>> = {
   hackernews: siYcombinator
 };
 
-const socialNames: Record<Platform, string> = {
-  x: "X / Twitter",
-  linkedin: "LinkedIn",
-  bluesky: "Bluesky",
-  mastodon: "Mastodon",
-  instagram: "Instagram",
-  youtube: "YouTube",
-  dribbble: "Dribbble",
-  pinterest: "Pinterest",
-  devto: "Dev.to",
-  hackernews: "Hacker News",
-  nostr: "Nostr"
-};
-
-const brandColors: Record<Platform, string> = {
+const brandColors = {
   x: "#4b5563",
   linkedin: "#0a66c2",
   bluesky: `#${siBluesky.hex}`,
@@ -51,7 +38,7 @@ const brandColors: Record<Platform, string> = {
   devto: `#${siDevdotto.hex}`,
   hackernews: `#${siYcombinator.hex}`,
   nostr: "#8f3ffc"
-};
+} satisfies Record<Platform, string>;
 
 type SocialLogoProps = {
   platform: Platform;
@@ -60,7 +47,7 @@ type SocialLogoProps = {
 
 export function SocialLogo({ platform, size = "md" }: SocialLogoProps) {
   const icon = socialIcons[platform];
-  const name = socialNames[platform];
+  const name = platformLabels[platform];
 
   return (
     <span

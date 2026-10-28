@@ -1,190 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { z } from "zod";
+import { createScheduleRequestSchema, defaultTargets, requestValidationMessage } from "@/lib/publishing/contracts";
 import { getConfigValue, getScheduledPosts, upsertScheduledPost } from "@/lib/local-config";
 import { getUploadedMedia } from "@/lib/media-store";
-import { postLimitIssuesForTargets, titleLimitIssues } from "@/lib/platform-limits";
 import { requestOrigin } from "@/lib/request-origin";
 import { ensureSchedulerStarted, runScheduledTick } from "@/lib/scheduler";
 import type { Platform, PublishedMedia, PublishTarget, ScheduledPost } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-const platformSchema = z.enum([
-  "x",
-  "linkedin",
-  "bluesky",
-  "mastodon",
-  "instagram",
-  "youtube",
-  "dribbble",
-  "pinterest",
-  "devto",
-  "hackernews",
-  "nostr"
-]);
-const targetSchema = z.object({
-  id: z.string().min(1).max(180),
-  platform: platformSchema,
-  profileId: z.string().max(120).optional(),
-  profileLabel: z.string().max(180).optional()
-});
-function normalizeOptionalUrl(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return undefined;
-  }
-
-  if (/^[a-z][a-z\d+\-.]*:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  return `https://${trimmed}`;
-}
-
-const optionalUrlSchema = z.preprocess(
-  normalizeOptionalUrl,
-  z
-    .string()
-    .url()
-    .refine((value) => {
-      try {
-        const parsed = new URL(value);
-        const isHttp = parsed.protocol === "http:" || parsed.protocol === "https:";
-        const isPublicLike = parsed.hostname === "localhost" || parsed.hostname.includes(".");
-
-        return isHttp && isPublicLike && !parsed.username && !parsed.password;
-      } catch {
-        return false;
-      }
-    })
-    .optional()
-);
-
-function requestedPlatforms(value: {
-  platforms?: Platform[];
-  targets?: Array<{ platform: Platform }>;
-}): Platform[] {
-  const platforms = value.targets?.length
-    ? value.targets.map((target) => target.platform)
-    : value.platforms || [];
-
-  return Array.from(new Set(platforms));
-}
-
-function canPublishWithoutText(value: {
-  platforms?: Platform[];
-  targets?: Array<{ platform: Platform }>;
-  title?: string;
-  mediaId?: string;
-}): boolean {
-  const platforms = requestedPlatforms(value);
-
-  if (platforms.length === 0) {
-    return false;
-  }
-
-  return (
-    Boolean(value.title?.trim()) &&
-    platforms.every((platform) =>
-      platform === "hackernews" ||
-      platform === "dribbble" ||
-      platform === "pinterest"
-    )
-  );
-}
-
-function defaultTargets(value: {
-  platforms?: Platform[];
-  targets?: PublishTarget[];
-}): PublishTarget[] {
-  return value.targets?.length
-    ? value.targets
-    : (value.platforms || []).map((platform) => ({
-        id: platform,
-        platform
-      }));
-}
-
-function targetLimitInput(target: PublishTarget) {
-  return {
-    platform: target.platform,
-    profileLabel: target.profileLabel,
-    xPremium: target.platform === "x" && getConfigValue("X_PREMIUM_LONG_POSTS", target.profileId) === "true"
-  };
-}
-
-const requestSchema = z
-  .object({
-    title: z.string().max(300).optional(),
-    text: z.string().max(100_000).default(""),
-    linkUrl: optionalUrlSchema,
-    mediaId: z.string().max(80).optional().or(z.literal("")),
-    platforms: z.array(platformSchema).max(30).optional(),
-    targets: z.array(targetSchema).max(30).optional(),
-    scheduledFor: z.string().min(1).max(80)
-  })
-  .refine((value) => (value.targets?.length || value.platforms?.length || 0) > 0, {
-    message: "Select at least one channel."
-  })
-  .refine((value) => !requestedPlatforms(value).includes("hackernews") || value.title?.trim(), {
-    message: "Hacker News requires a title."
-  })
-  .refine((value) => !requestedPlatforms(value).includes("youtube") || value.title?.trim(), {
-    message: "YouTube requires a title."
-  })
-  .refine((value) => !requestedPlatforms(value).includes("dribbble") || value.title?.trim(), {
-    message: "Dribbble requires a title."
-  })
-  .refine((value) => value.text.trim() || canPublishWithoutText(value), {
-    message: "Write post text, or add a title for title-only channels."
-  })
-  .refine((value) => Number.isFinite(Date.parse(value.scheduledFor)), {
-    message: "Choose a valid scheduled time."
-  })
-  .superRefine((value, ctx) => {
-    const platforms = requestedPlatforms(value);
-    const targets = defaultTargets(value);
-    const issues = [
-      ...titleLimitIssues(platforms, value.title || ""),
-      ...postLimitIssuesForTargets(targets.map(targetLimitInput), value.text)
-    ];
-
-    for (const issue of issues) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [issue.field],
-        message: issue.message
-      });
-    }
-  });
-
-function validationMessage(error: z.ZodError): string {
-  const fields = error.flatten().fieldErrors;
-
-  if (fields.linkUrl?.length) {
-    return "Link is invalid. Use a URL like https://example.com, or leave Link empty.";
-  }
-
-  if (fields.title?.length) {
-    return fields.title.join(" ");
-  }
-
-  if (fields.text?.length) {
-    return fields.text.join(" ");
-  }
-
-  if (error.flatten().formErrors.length) {
-    return error.flatten().formErrors.join(" ");
-  }
-
-  return "Schedule request is invalid. Check the fields and try again.";
-}
+const requestSchema = createScheduleRequestSchema(getConfigValue);
 
 function uniquePlatforms(targets: PublishTarget[]): Platform[] {
   return Array.from(new Set(targets.map((target) => target.platform)));
@@ -227,7 +52,7 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json());
 
   if (!parsed.success) {
-    return NextResponse.json({ error: validationMessage(parsed.error) }, { status: 400 });
+    return NextResponse.json({ error: requestValidationMessage(parsed.error, "schedule") }, { status: 400 });
   }
 
   const scheduledAt = Date.parse(parsed.data.scheduledFor);
@@ -236,12 +61,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Choose a scheduled time in the future." }, { status: 400 });
   }
 
-  const targets = (parsed.data.targets?.length
-    ? parsed.data.targets
-    : (parsed.data.platforms || []).map((platform) => ({
-        id: platform,
-        platform
-      }))) as PublishTarget[];
+  const targets = defaultTargets(parsed.data);
   const platforms = uniquePlatforms(targets);
   let media: PublishedMedia | undefined;
 

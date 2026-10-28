@@ -2,11 +2,13 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { configFields } from "@/lib/config-spec";
+import { isPlatform } from "@/lib/platform-catalog";
 import { isPlaceholderValue, validatePlatformConfig } from "@/lib/config-validation";
 import { dataPath } from "@/lib/runtime-paths";
 import type {
   ComposeDraft,
   Platform,
+  ProviderProfile,
   PublishedMedia,
   PublishedPost,
   PublishResult,
@@ -17,11 +19,7 @@ import type {
 
 export type LocalConfigValues = Record<string, string>;
 
-export type ProviderProfile = {
-  id: string;
-  label: string;
-  values: LocalConfigValues;
-};
+export type { ProviderProfile } from "@/lib/types";
 
 export type LocalConfigFile = {
   values: LocalConfigValues;
@@ -39,19 +37,6 @@ const fieldDefaults = new Map(
     .filter((field) => field.defaultValue)
     .map((field) => [field.name, field.defaultValue as string])
 );
-const platforms: Platform[] = [
-  "x",
-  "linkedin",
-  "bluesky",
-  "mastodon",
-  "instagram",
-  "youtube",
-  "dribbble",
-  "pinterest",
-  "devto",
-  "hackernews",
-  "nostr"
-];
 const storedPostTextLimit = 100_000;
 const fieldPlatform = new Map<string, Platform>(
   configFields.flatMap((field) =>
@@ -79,7 +64,7 @@ function normalizePlatforms(value: unknown): Platform[] {
   }
 
   return value
-    .filter((item): item is Platform => platforms.includes(item as Platform))
+    .filter(isPlatform)
     .slice(0, 30);
 }
 
@@ -94,7 +79,7 @@ function normalizePublishTargets(value: unknown): PublishTarget[] {
       const record = item as Record<string, unknown>;
       const platform = record.platform;
 
-      if (!platforms.includes(platform as Platform)) {
+      if (!isPlatform(platform)) {
         return null;
       }
 
@@ -104,7 +89,7 @@ function normalizePublishTargets(value: unknown): PublishTarget[] {
 
       return {
         id,
-        platform: platform as Platform,
+        platform,
         ...(profileId ? { profileId } : {}),
         ...(profileLabel ? { profileLabel } : {})
       };
@@ -133,7 +118,7 @@ function normalizeProfiles(value: unknown): Partial<Record<Platform, ProviderPro
   return Object.fromEntries(
     Object.entries(value)
       .map(([platform, profiles]) => {
-        if (!platforms.includes(platform as Platform)) {
+        if (!isPlatform(platform)) {
           return [platform, []];
         }
 
@@ -170,7 +155,7 @@ function normalizeActiveProfiles(value: unknown): Partial<Record<Platform, strin
 
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([platform, item]) => platforms.includes(platform as Platform) && typeof item === "string")
+      .filter(([platform, item]) => isPlatform(platform) && typeof item === "string")
       .map(([key, item]) => [key, item.trim()])
   ) as Partial<Record<Platform, string>>;
 }
@@ -203,12 +188,12 @@ function normalizePublishResult(value: unknown): PublishResult | null {
   const record = value as Record<string, unknown>;
   const platform = record.platform;
 
-  if (!platforms.includes(platform as Platform)) {
+  if (!isPlatform(platform)) {
     return null;
   }
 
   return {
-    platform: platform as Platform,
+    platform,
     ...(typeof record.targetId === "string" && record.targetId ? { targetId: record.targetId.slice(0, 180) } : {}),
     ...(typeof record.profileId === "string" && record.profileId ? { profileId: record.profileId.slice(0, 120) } : {}),
     ...(typeof record.profileLabel === "string" && record.profileLabel ? { profileLabel: record.profileLabel.slice(0, 180) } : {}),

@@ -8,6 +8,7 @@ import {
 import { getUploadedMedia } from "@/lib/media-store";
 import { postLimitIssuesForTargets, titleLimitIssues } from "@/lib/platform-limits";
 import { providers } from "@/lib/providers";
+import { targetLimitInput } from "@/lib/publishing/contracts";
 import type {
   Platform,
   ProviderContext,
@@ -52,16 +53,6 @@ function formatConfigIssues(target: PublishTarget): string {
   return issues.map((issue) => issue.message).slice(0, 2).join("; ");
 }
 
-function targetLimitInput(target: PublishTarget) {
-  return {
-    platform: target.platform,
-    profileLabel: target.profileLabel,
-    xPremium:
-      target.platform === "x" &&
-      getConfigValue("X_PREMIUM_LONG_POSTS", target.profileId) === "true"
-  };
-}
-
 function publishedMediaFromContext(media: ProviderContext["media"]): PublishedMedia | undefined {
   if (!media) {
     return undefined;
@@ -82,7 +73,7 @@ export async function runPublish(input: PublishRunInput): Promise<PublishRunResu
   const platforms = uniquePlatforms(targets);
   const limitIssues = [
     ...titleLimitIssues(platforms, input.title || ""),
-    ...postLimitIssuesForTargets(targets.map(targetLimitInput), input.text)
+    ...postLimitIssuesForTargets(targets.map((target) => targetLimitInput(target, getConfigValue)), input.text)
   ];
   const now = input.now || new Date();
   let media: ProviderContext["media"] | undefined;

@@ -13,7 +13,7 @@ import type { Platform, ProviderContext, PublishResult } from "@/lib/types";
 
 type Provider = (ctx: ProviderContext) => Promise<PublishResult>;
 
-export const providers: Record<Platform, Provider> = {
+export const providers = {
   x: publishX,
   linkedin: publishLinkedIn,
   bluesky: publishBluesky,
@@ -25,4 +25,4 @@ export const providers: Record<Platform, Provider> = {
   devto: publishDevto,
   hackernews: publishHackerNews,
   nostr: publishNostr
-};
+} satisfies Record<Platform, Provider>;

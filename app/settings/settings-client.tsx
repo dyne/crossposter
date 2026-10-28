@@ -24,13 +24,8 @@ import { SocialLogo } from "@/components/social-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { ConfigField } from "@/lib/config-spec";
 import { validateConfigField } from "@/lib/config-validation";
-import type { Platform } from "@/lib/types";
-
-type ProviderProfile = {
-  id: string;
-  label: string;
-  values: Record<string, string>;
-};
+import type { Platform, ProviderProfile } from "@/lib/types";
+import { platformLabels } from "@/lib/platform-catalog";
 
 type ConfigResponse = {
   fields: ConfigField[];
@@ -118,17 +113,17 @@ type SetupGuide = {
 };
 
 const platforms: Array<{ id: Platform; label: string }> = [
-  { id: "x", label: "X / Twitter" },
-  { id: "linkedin", label: "LinkedIn" },
-  { id: "bluesky", label: "Bluesky" },
-  { id: "mastodon", label: "Mastodon" },
-  { id: "instagram", label: "Instagram" },
-  { id: "youtube", label: "YouTube" },
-  { id: "devto", label: "Dev.to" },
-  { id: "pinterest", label: "Pinterest" },
-  { id: "hackernews", label: "Hacker News" },
-  { id: "nostr", label: "Nostr" },
-  { id: "dribbble", label: "Dribbble" }
+  { id: "x", label: platformLabels.x },
+  { id: "linkedin", label: platformLabels.linkedin },
+  { id: "bluesky", label: platformLabels.bluesky },
+  { id: "mastodon", label: platformLabels.mastodon },
+  { id: "instagram", label: platformLabels.instagram },
+  { id: "youtube", label: platformLabels.youtube },
+  { id: "devto", label: platformLabels.devto },
+  { id: "pinterest", label: platformLabels.pinterest },
+  { id: "hackernews", label: platformLabels.hackernews },
+  { id: "nostr", label: platformLabels.nostr },
+  { id: "dribbble", label: platformLabels.dribbble }
 ];
 
 const settingsViews: Array<{ id: SettingsView; label: string; href: string }> = [

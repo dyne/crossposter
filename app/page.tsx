@@ -44,13 +44,13 @@ import {
 import type {
   ComposeDraft,
   Platform,
+  ProviderProfile,
   PublishedMedia,
   PublishedPost,
   PublishResult,
   PublishTarget,
   ScheduledPost
 } from "@/lib/types";
-import type { ProviderProfile } from "@/lib/local-config";
 
 const channels: Array<{
   id: Platform;

@@ -19,26 +19,13 @@ import {
 import { ProjectLinks } from "@/components/project-links";
 import { SocialLogo } from "@/components/social-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
-import type { Platform, PublishTarget, ScheduledPost } from "@/lib/types";
+import type { PublishTarget, ScheduledPost } from "@/lib/types";
+import { platformLabels } from "@/lib/platform-catalog";
 
 type ScheduledResponse = {
   scheduledPosts?: ScheduledPost[];
   scheduledPost?: ScheduledPost;
   error?: unknown;
-};
-
-const platformLabels: Record<Platform, string> = {
-  x: "X / Twitter",
-  linkedin: "LinkedIn",
-  bluesky: "Bluesky",
-  mastodon: "Mastodon",
-  instagram: "Instagram",
-  youtube: "YouTube",
-  dribbble: "Dribbble",
-  pinterest: "Pinterest",
-  devto: "Dev.to",
-  hackernews: "Hacker News",
-  nostr: "Nostr"
 };
 
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
