@@ -5,6 +5,7 @@ import { getConfigValue, getScheduledPosts, upsertScheduledPost } from "@/lib/lo
 import { getUploadedMedia } from "@/lib/media-store";
 import { requestOrigin } from "@/lib/request-origin";
 import { ensureSchedulerStarted, runScheduledTick } from "@/lib/scheduler";
+import { scheduledQueue } from "@/lib/scheduling/queries";
 import type { Platform, PublishedMedia, PublishTarget, ScheduledPost } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -13,17 +14,6 @@ const requestSchema = createScheduleRequestSchema(getConfigValue);
 
 function uniquePlatforms(targets: PublishTarget[]): Platform[] {
   return Array.from(new Set(targets.map((target) => target.platform)));
-}
-
-function scheduledList() {
-  return getScheduledPosts()
-    .filter(
-      (post) =>
-        post.status === "scheduled" ||
-        post.status === "publishing" ||
-        post.status === "failed"
-    )
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
 function mediaSummary(media: Awaited<ReturnType<typeof getUploadedMedia>>): PublishedMedia {
@@ -44,7 +34,7 @@ export async function GET(request: Request) {
   await runScheduledTick(tickUrl);
 
   return NextResponse.json({
-    scheduledPosts: scheduledList()
+    scheduledPosts: scheduledQueue(getScheduledPosts())
   });
 }
 
@@ -94,6 +84,6 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     scheduledPost,
-    scheduledPosts: scheduledList()
+    scheduledPosts: scheduledQueue(getScheduledPosts())
   });
 }
