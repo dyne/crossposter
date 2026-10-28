@@ -49,6 +49,7 @@ test("fetchStarHistory paginates, authenticates optionally, and sorts", async ()
   const stars = await fetchStarHistory("test-token", fakeFetch);
 
   assert.equal(requests.length, 2);
+  assert.match(requests[0].url, /^https:\/\/api\.github\.com\/repos\/dyne\/crossposter\/stargazers\?/);
   assert.match(requests[1].url, /page=2$/);
   assert.equal(requests[0].options.headers.Authorization, "Bearer test-token");
   assert.equal(stars[0], "2026-05-01T00:00:00Z");

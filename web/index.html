@@ -9,7 +9,7 @@
       name="description"
       content="Crossposter is a local-first dashboard for composing once, attaching media, checking limits, and publishing to connected social accounts from localhost."
     >
-    <meta name="author" content="Apoorv Darshan">
+    <meta name="author" content="Dyne.org foundation">
     <meta name="application-name" content="Crossposter">
     <meta
       name="keywords"
@@ -19,8 +19,8 @@
     <meta name="theme-color" content="#050505" media="(prefers-color-scheme: dark)">
     <meta name="theme-color" content="#f4f6f0" media="(prefers-color-scheme: light)">
     <link rel="canonical" href="https://dyne.org/crossposter/">
-    <link rel="me" href="https://github.com/apoorvdarshan">
-    <link rel="me" href="https://x.com/apoorvdarshan">
+    <link rel="me" href="https://github.com/dyne">
+    <link rel="me" href="https://socials.dyne.org/twitter">
     <meta property="og:site_name" content="Crossposter">
     <meta property="og:type" content="website">
     <meta property="og:locale" content="en_US">
@@ -35,8 +35,8 @@
     <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="Crossposter hero image showing local social publishing targets.">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:site" content="@apoorvdarshan">
-    <meta name="twitter:creator" content="@apoorvdarshan">
+    <meta name="twitter:site" content="@dyneorg">
+    <meta name="twitter:creator" content="@dyneorg">
     <meta name="twitter:domain" content="dyne.org">
     <meta name="twitter:url" content="https://dyne.org/crossposter/">
     <meta name="twitter:title" content="Crossposter - Local Social Publishing Dashboard">
@@ -58,7 +58,7 @@
             "description": "Local-first social publishing dashboard for accounts you control.",
             "inLanguage": "en-US",
             "publisher": {
-              "@id": "https://dyne.org/crossposter/#person"
+              "@id": "https://dyne.org/crossposter/#organization"
             }
           },
           {
@@ -71,8 +71,8 @@
             "image": "https://dyne.org/crossposter/assets/opengraph.png",
             "screenshot": "https://dyne.org/crossposter/assets/opengraph.png",
             "description": "Compose once, attach media, check platform limits, and publish to connected social accounts from localhost.",
-            "codeRepository": "https://github.com/apoorvdarshan/crossposter",
-            "license": "https://github.com/apoorvdarshan/crossposter/blob/main/LICENSE",
+            "codeRepository": "https://github.com/dyne/crossposter",
+            "license": "https://github.com/dyne/crossposter/blob/main/LICENSE",
             "author": {
               "@id": "https://dyne.org/crossposter/#person"
             },
@@ -86,6 +86,22 @@
               "Media uploads and platform limit checks",
               "Scheduled posts and local publish history",
               "Provider readiness cards for connected social accounts"
+            ]
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://dyne.org/crossposter/#organization",
+            "name": "Dyne.org foundation",
+            "url": "https://dyne.org/",
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "contactType": "Project support",
+              "url": "https://dyne.org/contact/"
+            },
+            "sameAs": [
+              "https://github.com/dyne",
+              "https://socials.dyne.org/mastodon",
+              "https://socials.dyne.org/twitter"
             ]
           },
           {
@@ -184,12 +200,12 @@
         <a href="#providers"><img src="assets/ui/providers.svg" alt="">Providers</a>
         <a href="#limits"><img src="assets/ui/limits.svg" alt="">Limits</a>
         <a href="#policy"><img src="assets/ui/policy.svg" alt="">Policy</a>
-        <a href="https://github.com/apoorvdarshan/crossposter/issues/new" rel="noreferrer" target="_blank"><img src="assets/social/issue.svg" alt="">Report issue</a>
+        <a href="https://github.com/dyne/crossposter/issues/new" rel="noreferrer" target="_blank"><img src="assets/social/issue.svg" alt="">Report issue</a>
         <button class="theme-button" type="button" aria-label="Switch to light mode" aria-pressed="true">
           <img src="assets/ui/moon.svg" alt="">
           <span aria-hidden="true">Dark</span>
         </button>
-        <a class="nav-button" href="https://github.com/apoorvdarshan/crossposter" rel="noreferrer" target="_blank"><img src="assets/social/github.svg" alt="">GitHub</a>
+        <a class="nav-button" href="https://github.com/dyne/crossposter" rel="noreferrer" target="_blank"><img src="assets/social/github.svg" alt="">GitHub</a>
       </nav>
     </header>
 
@@ -208,7 +224,7 @@
           <span><img src="assets/social/hackernews.svg" alt=""></span>
           <span><img src="assets/social/dribbble.svg" alt=""></span>
         </div>
-        <a class="back-link" href="https://github.com/apoorvdarshan/crossposter" rel="noreferrer" target="_blank">Open-source local publisher</a>
+        <a class="back-link" href="https://github.com/dyne/crossposter" rel="noreferrer" target="_blank">Open-source local publisher</a>
         <div class="hero-center">
           <p class="eyebrow">Crossposter for your own accounts</p>
           <h1 id="hero-title">
@@ -222,7 +238,7 @@
           </p>
           <div class="hero-actions">
             <a class="button primary" href="#start">Run locally</a>
-            <a class="button secondary" href="https://github.com/apoorvdarshan/crossposter" rel="noreferrer" target="_blank">View source</a>
+            <a class="button secondary" href="https://github.com/dyne/crossposter" rel="noreferrer" target="_blank">View source</a>
           </div>
           <div class="command-panel hero-terminal" aria-label="Install command">
             <div class="command-head">
@@ -247,7 +263,7 @@
             </div>
             <div class="related-link">
               <span>Related link</span>
-              <a href="https://github.com/apoorvdarshan/crossposter" rel="noreferrer" target="_blank">Repository</a>
+              <a href="https://github.com/dyne/crossposter" rel="noreferrer" target="_blank">Repository</a>
             </div>
           </article>
 
@@ -552,34 +568,49 @@ brew services stop crossposter</code></pre>
             </div>
           </section>
 
-          <section id="contact" class="doc-section contact-section" data-search="contact github x email ko-fi issue support">
+          <section id="contact" class="doc-section contact-section" data-search="contact github x matrix mastodon dyne issue support donate">
             <div class="section-kicker">Project links</div>
             <h2>Source, support, and contact.</h2>
             <div class="contact-grid">
-              <a href="https://github.com/apoorvdarshan/crossposter" rel="noreferrer" target="_blank">
+              <a href="https://dyne.org/crossposter/">
+                <span class="contact-mark"><img src="assets/logo-crossposter.png" alt=""></span>
+                <span class="contact-label">Official project</span>
+                <strong>Crossposter at Dyne</strong>
+              </a>
+              <a href="https://github.com/dyne/crossposter" rel="noreferrer" target="_blank">
                 <span class="contact-mark"><img src="assets/social/github.svg" alt=""></span>
                 <span class="contact-label">GitHub</span>
                 <strong>Repository</strong>
               </a>
-              <a href="https://github.com/apoorvdarshan/crossposter/issues/new" rel="noreferrer" target="_blank">
+              <a href="https://github.com/dyne/crossposter/issues/new" rel="noreferrer" target="_blank">
                 <span class="contact-mark"><img src="assets/social/issue.svg" alt=""></span>
                 <span class="contact-label">Issues</span>
                 <strong>Report an issue</strong>
               </a>
-              <a href="https://x.com/apoorvdarshan" rel="noreferrer" target="_blank">
+              <a href="https://socials.dyne.org/twitter" rel="noreferrer" target="_blank">
                 <span class="contact-mark"><img src="assets/social/x.svg" alt=""></span>
                 <span class="contact-label">Follow</span>
-                <strong>@apoorvdarshan</strong>
+                <strong>@dyneorg</strong>
               </a>
-              <a href="mailto:apoorvdarshan@gmail.com">
+              <a href="https://dyne.org/contact/">
                 <span class="contact-mark"><img src="assets/social/email.svg" alt=""></span>
-                <span class="contact-label">Email</span>
-                <strong>apoorvdarshan@gmail.com</strong>
+                <span class="contact-label">Contact</span>
+                <strong>Dyne community</strong>
               </a>
-              <a href="https://ko-fi.com/apoorvdarshan" rel="noreferrer" target="_blank">
+              <a href="https://dyne.org/donate/" rel="noreferrer" target="_blank">
                 <span class="contact-mark"><img src="assets/social/kofi.svg" alt=""></span>
                 <span class="contact-label">Support</span>
-                <strong>Ko-fi</strong>
+                <strong>Support Dyne</strong>
+              </a>
+              <a href="https://socials.dyne.org/matrix" rel="noreferrer" target="_blank">
+                <span class="contact-mark"><img src="assets/social/issue.svg" alt=""></span>
+                <span class="contact-label">Community chat</span>
+                <strong>Dyne Matrix Space</strong>
+              </a>
+              <a href="https://socials.dyne.org/mastodon" rel="noreferrer" target="_blank">
+                <span class="contact-mark"><img src="assets/social/mastodon.svg" alt=""></span>
+                <span class="contact-label">Mastodon</span>
+                <strong>@dyneorg@mastodon.social</strong>
               </a>
             </div>
           </section>
@@ -589,12 +620,13 @@ brew services stop crossposter</code></pre>
 
     <footer class="site-footer">
       <span>Crossposter</span>
+      <a href="https://dyne.org/crossposter/">Official project</a>
       <a href="https://github.com/apoorvdarshan/homebrew-tap" rel="noreferrer" target="_blank">Homebrew</a>
-      <a href="https://github.com/apoorvdarshan/crossposter" rel="noreferrer" target="_blank">GitHub</a>
-      <a href="https://github.com/apoorvdarshan/crossposter/issues/new" rel="noreferrer" target="_blank">Report issue</a>
-      <a href="https://ko-fi.com/apoorvdarshan" rel="noreferrer" target="_blank">Ko-fi</a>
-      <a href="mailto:apoorvdarshan@gmail.com">Email</a>
-      <a href="https://x.com/apoorvdarshan" rel="noreferrer" target="_blank">Follow</a>
+      <a href="https://github.com/dyne/crossposter" rel="noreferrer" target="_blank">GitHub</a>
+      <a href="https://github.com/dyne/crossposter/issues/new" rel="noreferrer" target="_blank">Report issue</a>
+      <a href="https://dyne.org/donate/" rel="noreferrer" target="_blank">Donate</a>
+      <a href="https://dyne.org/contact/">Contact</a>
+      <a href="https://socials.dyne.org/twitter" rel="noreferrer" target="_blank">Follow</a>
     </footer>
 
     <button class="back-to-top" type="button" aria-label="Back to top">Top</button>

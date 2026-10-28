@@ -10,8 +10,7 @@ Please do not open a public issue for sensitive security reports.
 
 Report security issues by email:
 
-- apoorvdarshan@gmail.com
-- ad13dtu@gmail.com
+- info@dyne.org
 
 Include:
 
@@ -20,10 +19,15 @@ Include:
 - affected files or endpoints, if known
 - impact and suggested fix, if known
 
+Official project page: https://dyne.org/crossposter/
+
+For general contact options, see https://dyne.org/contact/. Keep sensitive reports
+in email rather than public community channels.
+
 For non-sensitive bugs and feature requests, use GitHub Issues instead:
 
-- Report an issue: https://github.com/apoorvdarshan/crossposter/issues/new
-- Request a feature: https://github.com/apoorvdarshan/crossposter/issues/new
+- Report an issue: https://github.com/dyne/crossposter/issues/new
+- Request a feature: https://github.com/dyne/crossposter/issues/new
 
 ## Secret Handling
 

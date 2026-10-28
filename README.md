@@ -606,8 +606,15 @@ Before exposing it publicly:
 
 ## Contact And Support
 
+Official project page: https://dyne.org/crossposter/
+
+Community chat and social channels: https://dyne.org/contact/
+
 - Email: info@dyne.org
-- X: https://x.com/DyneOrg
+- Matrix: https://socials.dyne.org/matrix
+- Mastodon: https://socials.dyne.org/mastodon
+- X: https://socials.dyne.org/twitter
+- Support Dyne: https://dyne.org/donate/
 - Report an issue: https://github.com/dyne/crossposter/issues/new
 
 Do not post API keys, tokens, app secrets, or private account details in public

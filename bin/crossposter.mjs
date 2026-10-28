@@ -308,7 +308,7 @@ function startNext(port, dataRoot, dotEnvValues) {
 }
 
 function starBanner() {
-  const repo = "https://github.com/apoorvdarshan/crossposter";
+  const repo = "https://github.com/dyne/crossposter";
   const rule = "─".repeat(60);
 
   return [

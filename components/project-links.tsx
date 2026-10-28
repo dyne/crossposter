@@ -1,4 +1,4 @@
-import { Coffee, Github, type LucideIcon } from "lucide-react";
+import { Coffee, Github, Globe, type LucideIcon } from "lucide-react";
 import { siX, type SimpleIcon } from "simple-icons";
 
 type ProjectLink = {
@@ -12,22 +12,28 @@ type ProjectLink = {
 
 const projectLinks: ProjectLink[] = [
   {
-    href: "https://github.com/apoorvdarshan/crossposter",
+    href: "https://github.com/dyne/crossposter",
     label: "Star",
     title: "Star Crossposter on GitHub",
     icon: Github,
     featured: true
   },
   {
-    href: "https://x.com/apoorvdarshan",
+    href: "https://dyne.org/crossposter/",
+    label: "Website",
+    title: "Crossposter official project page",
+    icon: Globe
+  },
+  {
+    href: "https://socials.dyne.org/twitter",
     label: "Follow",
-    title: "Follow @apoorvdarshan on X",
+    title: "Follow @dyneorg on X",
     simpleIcon: siX
   },
   {
-    href: "https://ko-fi.com/apoorvdarshan",
-    label: "Ko-fi",
-    title: "Support on Ko-fi",
+    href: "https://dyne.org/donate/",
+    label: "Support",
+    title: "Support the Dyne.org foundation",
     icon: Coffee
   }
 ];

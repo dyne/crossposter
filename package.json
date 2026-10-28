@@ -3,13 +3,13 @@
   "version": "1.1.16",
   "description": "Local-first social publishing dashboard for accounts you control.",
   "license": "MIT",
-  "homepage": "https://crossposter.apoorvdarshan.com",
+  "homepage": "https://dyne.org/crossposter/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/apoorvdarshan/crossposter.git"
+    "url": "git+https://github.com/dyne/crossposter.git"
   },
   "bugs": {
-    "url": "https://github.com/apoorvdarshan/crossposter/issues"
+    "url": "https://github.com/dyne/crossposter/issues"
   },
   "bin": {
     "crossposter": "bin/crossposter.mjs"

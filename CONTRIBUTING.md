@@ -126,11 +126,15 @@ Good pull requests should:
 
 ## Issues And Feature Requests
 
+Official project page: https://dyne.org/crossposter/
+
+Find community chat and social channels at https://dyne.org/contact/.
+
 Use GitHub Issues for public bug reports and feature requests:
 
-- Report an issue: https://github.com/apoorvdarshan/crossposter/issues/new
-- Request a feature: https://github.com/apoorvdarshan/crossposter/issues/new
-- View open issues: https://github.com/apoorvdarshan/crossposter/issues
+- Report an issue: https://github.com/dyne/crossposter/issues/new
+- Request a feature: https://github.com/dyne/crossposter/issues/new
+- View open issues: https://github.com/dyne/crossposter/issues
 
 Do not include API keys, tokens, secrets, or private account details in a public
 issue. For sensitive security reports, use the email process in `SECURITY.md`.
