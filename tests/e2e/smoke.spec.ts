@@ -4,6 +4,7 @@ test("composer edits save to fixtures and theme survives a reload", async ({ pag
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Compose", exact: true })).toBeVisible();
   await expect(page.getByText("Profile: Fixture Bluesky")).toBeVisible();
+  await expect(page.getByRole("checkbox")).toBeChecked();
   await page.getByPlaceholder("Write the post once.").fill("Fixture browser draft");
   await expect.poll(() => fixtureState.draft.text).toBe("Fixture browser draft");
   await page.getByRole("button", { name: "Dark", exact: true }).click();
@@ -16,6 +17,7 @@ test("composer edits save to fixtures and theme survives a reload", async ({ pag
 test("publish sends the selected fixture target and displays an uncertain result", async ({ page, fixtureState }) => {
   await page.goto("/");
   await expect(page.getByText("Profile: Fixture Bluesky")).toBeVisible();
+  await expect(page.getByRole("checkbox")).toBeChecked();
   await page.getByPlaceholder("Write the post once.").fill("Fixture publish only");
   await page.getByRole("button", { name: "Publish draft", exact: true }).click();
   const results = page.getByLabel("Latest publish result");
@@ -27,6 +29,7 @@ test("publish sends the selected fixture target and displays an uncertain result
 test("schedule opens its controls and the scheduler loads an isolated empty queue", async ({ page, fixtureState }) => {
   await page.goto("/");
   await expect(page.getByText("Profile: Fixture Bluesky")).toBeVisible();
+  await expect(page.getByRole("checkbox")).toBeChecked();
   await page.getByPlaceholder("Write the post once.").fill("Fixture scheduled draft");
   await page.getByRole("button", { name: "Schedule draft", exact: true }).click();
   await page.getByRole("button", { name: "30 min", exact: true }).click();

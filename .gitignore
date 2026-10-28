@@ -17,6 +17,7 @@ dist
 coverage
 test-results
 playwright-report
+output/playwright
 *.log
 *.tsbuildinfo
 __pycache__

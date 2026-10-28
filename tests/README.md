@@ -38,8 +38,10 @@ configuration and media modules with disposable roots and intercepted IO.
 [Characterization notes](app/characterization.md) record existing disagreements
 that this refactor preserves.
 
-The three Chromium smoke tests exercise draft editing/reload, theme persistence,
+The Chromium smoke tests exercise draft editing/reload, theme persistence,
 mocked publishing with an uncertain result, and schedule controls/navigation.
+Composer media tests also exercise legacy IndexedDB migration, reload/removal,
+and server-staged media imported through the current origin.
 Every browser API call uses an explicit fixture. Unexpected API, outbound HTTP
 or WebSocket requests fail the test. The Next production server uses a fresh
 temporary application/data directory with no personal `.env` or configuration;
@@ -59,3 +61,35 @@ CLI reporters, retain `tests/app/support/require-tests.ts` (Vitest) or
 ```bash
 npm run test:unit -- --reporter=default --reporter=./tests/app/support/require-tests.ts --reporter=json --outputFile.json=test-results/unit.json
 ```
+
+Composer lifecycle unit tests cover storage/upload failures, delayed responses,
+media replacement/removal, and disposal of pending image/upload tasks and timers.
+`composer-characterization.test.tsx` was first run against the original page
+before extracting crop/conversion and persistence behavior.
+`composer-components.test.tsx` exercises profile selection, limits, loading and
+failure states, mixed/uncertain output and history through the composed page.
+`composer-flows.spec.ts` adds keyboard editing, selection, upload/publish,
+history reload/clear and scheduling with the same isolated browser fixtures.
+Browser compose tests wait for the default profile checkbox to become selected
+before editing; profile labels alone can appear before draft/media hydration.
+The known pre-hydration overwrite remains a separate unit characterization.
+
+The route composes views in `components/composer/`. Draft persistence, media
+resources and publish/schedule actions each have an owning hook. Browser-safe
+channel metadata, media policy, validation and presentation live in `lib/compose/`
+and reuse the shared platform catalog/limits. No composer module imports server
+configuration or provider implementations.
+
+For local composer visual evidence, run the fixture matrix after building:
+
+```bash
+COMPOSER_VISUAL_PHASE=after PLAYWRIGHT_BROWSERS_PATH=/tmp/crossposter-playwright-browsers npm run test:e2e -- tests/e2e/composer-visual.spec.ts
+```
+
+This writes twelve full-page PNGs and metadata sidecars under the ignored
+`output/playwright/composer-after/`: composer, media preview and uncertain
+results at 390x844 and 1440x900, each at 100%/200% font size. Scaling multiplies
+each HTML element's original computed font size; it does not change browser zoom,
+viewport or device scale. Date, content, API responses and media are fixtures.
+The screenshots are review artifacts; compare them with the retained baseline
+for the same source/matrix. Capturing alone does not assert visual equivalence.

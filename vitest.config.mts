@@ -22,7 +22,7 @@ export default defineConfig({
     sequence: { concurrent: false },
     coverage: {
       provider: "v8",
-      include: ["lib/**/*.{ts,tsx}", "app/api/**/*.ts", "components/**/*.tsx"],
+      include: ["lib/**/*.{ts,tsx}", "app/api/**/*.ts", "components/**/*.{ts,tsx}"],
       reporter: ["text", "json-summary", "lcov"],
       reportsDirectory: "./coverage"
     }
