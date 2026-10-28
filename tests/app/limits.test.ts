@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { postLimitIssues, postLimitIssuesForTargets, textBytes, textLength, titleLimitIssues } from "@/lib/platform-limits";
+import { describe, expect, it, vi } from "vitest";
+import { formatLimitBytes, postLimitIssues, postLimitIssuesForTargets, textBytes, textLength, titleLimitIssues, xMediaSizeLimit } from "@/lib/platform-limits";
 
 describe("public publishing limits", () => {
   it("counts graphemes independently of UTF-8 bytes", () => {
@@ -35,5 +35,26 @@ describe("public publishing limits", () => {
   it("ignores whitespace in Dev.to titles and deduplicates platform issues", () => {
     expect(titleLimitIssues(["devto"], " a ".repeat(128))).toEqual([]);
     expect(titleLimitIssues(["devto", "devto"], " a ".repeat(129))).toEqual([{ id: "devto-title-limit", field: "title", message: "Dev.to title is 129/128 characters. Shorten the title or deselect Dev.to." }]);
+  });
+
+  it("falls back to Unicode code points when the browser lacks grapheme segmentation", () => {
+    vi.stubGlobal("Intl", Object.create(Intl, { Segmenter: { value: undefined } }));
+    expect(textLength("😀é")).toBe(2);
+    expect(textLength("e\u0301")).toBe(2);
+  });
+
+  it.each([
+    [512, "512 B"], [1024, "1.0 KB"], [10 * 1024, "10 KB"],
+    [1024 ** 2, "1.0 MB"], [16 * 1024 ** 3, "16 GB"]
+  ] as const)("formats the displayed upload bound %s as %s", (bytes, label) => {
+    expect(formatLimitBytes(bytes)).toBe(label);
+  });
+
+  it("distinguishes photo, GIF and account-specific video upload bounds", () => {
+    expect(xMediaSizeLimit("image", "image/png", false)).toEqual({ bytes: 5 * 1024 ** 2, label: "X photo" });
+    expect(xMediaSizeLimit("image", "image/gif", false)).toEqual({ bytes: 15 * 1024 ** 2, label: "X GIF" });
+    expect(xMediaSizeLimit("video", "video/mp4", false)).toEqual({ bytes: 512 * 1024 ** 2, label: "X video" });
+    expect(xMediaSizeLimit("video", "video/mp4", true)).toEqual({ bytes: 16 * 1024 ** 3, label: "X Premium video" });
+    expect(xMediaSizeLimit("audio", "audio/mpeg", true)).toBeUndefined();
   });
 });

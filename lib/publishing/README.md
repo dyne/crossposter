@@ -48,7 +48,7 @@ The extension locations are:
 | Adapter registration | Add `lib/providers/<platform>.ts`, then import and register it in `lib/providers/index.ts`. `satisfies ProviderRegistry` rejects missing/extra registrations. The runner needs no platform branch. |
 | Configuration/profile fields | `lib/config-spec.ts`: `configFields` names, labels/help, defaults, `secret`, `requiredFor`/`showFor`, and exhaustive `requiredConfigByPlatform` initializer. Keep environment names and profile precedence explicit. |
 | Content/media limits | `lib/platform-limits.ts`: title/text limits and counting rules; enforce adapter-specific MIME, dimensions and upload constraints in the adapter before external IO. |
-| Composer/settings metadata | `app/page.tsx`: `channels` supplies labels and composer/media hints. `app/settings/settings-client.tsx`: `platforms` and optional `setupGuides` expose profile configuration. These UI lists remain separate from the shared ID/label catalog. |
+| Composer/settings metadata | `lib/compose/channels.ts`: `channels` supplies labels and composer/media hints; `lib/compose/media-policy.ts` owns browser media eligibility. `lib/settings/provider-guides.ts`: `platforms` and optional `setupGuides` expose profile configuration. These UI lists remain separate from the shared ID/label catalog. |
 | Request/storage regression fixtures | `tests/app/platform-catalog.test.ts`, `request-contract.test.ts`, route tests and storage tests; preserve existing persisted IDs/formats and validation precedence. |
 | Adapter/registration contract tests | `tests/app/provider-contract.test.ts` and `provider-contract.typecheck.ts`; run `npm run test:unit -- tests/app/provider-contract.test.ts` and `npm run typecheck`. |
 

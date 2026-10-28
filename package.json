@@ -26,6 +26,8 @@
     "requirements.txt",
     "tsconfig.json",
     "README.md",
+    "CONTRIBUTING.md",
+    "ARCHITECTURE.md",
     "CHANGELOG.md",
     "LICENSE",
     "AGENT_POSTING.md"
@@ -42,6 +44,7 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:boundaries": "node --test tests/architecture/import-boundaries.test.mjs",
     "test:e2e": "playwright test",
     "test:browser-verification": "python3 -B -m unittest discover -s tests -p 'test_*.py'"
   },

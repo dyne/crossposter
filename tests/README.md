@@ -5,6 +5,7 @@ and Python 3. The Python verification and worker tests need no extra packages.
 
 ```bash
 npm ci
+npm run test:boundaries
 npm run test:unit
 npm run test:coverage
 npm run test:browser-verification
@@ -22,6 +23,32 @@ checks on Node 22, with read-only repository permissions and no publishing or
 account credentials. Failed commands fail the job. Coverage, browser JSON results
 and failure traces/screenshots are retained for seven days as `test-evidence`.
 The separate tag-triggered release workflow retains its existing authorization.
+
+Coverage includes **all** production TypeScript/TSX under `app/`, `lib/` and
+`components/`, including unimported files and route-page orchestration. It does
+not measure the CLI, Python scripts or static marketing site. Vitest's unit
+coverage does not include browser execution; browser smoke is a separate gate.
+An unimported page/API adapter therefore contributes zero even if browser tests
+exercise it. No whole-product coverage threshold is claimed.
+
+`vitest.config.mts` explicitly gates each executable critical module at **85%
+statements and 80% branches**, independently: publishing service/facade;
+scheduling policy/service/lifecycle/queries/facade; shared request contracts,
+platform catalog/limits/config specification; and all four normalization codec
+modules. Per-file gates prevent aggregate masking. Type-only contracts have no
+executable statements and are checked by `typecheck`. Storage IO, providers,
+composer, settings, calendar and other routes are still measured and reported
+separately; they are not silently excluded or represented by critical coverage.
+
+`test:boundaries` parses current production imports with TypeScript, including
+runtime re-exports, `require` and literal dynamic imports. It traces client
+entries/browser-safe libraries to reject Node, `server-only`, providers and
+server storage; it also keeps codecs and publishing/scheduling use cases apart
+from concrete IO adapters. Type-only imports are erased and allowed. Unresolved
+local/computed runtime imports fail these protected boundaries. Fixture tests
+prove that violations are rejected. This source check complements Next's
+production server/client guard; it does not inspect third-party package internals.
+See the [required scenario checklist](SCENARIOS.md) for the behavior gates.
 
 If the default npm/browser caches are read-only, use writable caches for the
 installation and run:
