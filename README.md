@@ -1,10 +1,6 @@
-<p align="center">
-  <a href="https://github.com/apoorvdarshan/homebrew-tap"><img alt="Homebrew" src="https://img.shields.io/badge/Homebrew-tap-FBB040?logo=homebrew&amp;logoColor=black"></a>
-  <a href="https://www.npmjs.com/package/@apoorvdarshan/crossposter"><img alt="npm" src="https://img.shields.io/npm/v/@apoorvdarshan/crossposter?logo=npm"></a>
-</p>
 
 <p align="center">
-  <img src="https://crossposter.apoorvdarshan.com/assets/logo-crossposter.png" alt="Crossposter logo" width="120" height="120">
+  <img src="https://dyne.org/crossposter/assets/logo-crossposter.png" alt="Crossposter logo" width="120" height="120">
 </p>
 
 <h1 align="center">Crossposter</h1>
@@ -129,82 +125,23 @@ can hand to an agent so it can post through your running server on
 
 ## Run Locally
 
-### Recommended: Homebrew
-
-Install the production build and launch it locally:
-
-```bash
-brew install apoorvdarshan/tap/crossposter
-crossposter
-```
-
-Homebrew keeps the application code under its managed prefix. Crossposter keeps
-config, uploads, browser sessions, schedules, and history separately in
-`~/Library/Application Support/Crossposter` on macOS, so upgrading or
-uninstalling the Formula does not erase local publishing data.
-
-Start it automatically after login:
-
-```bash
-brew services start crossposter
-```
-
-Upgrade without changing local data:
-
-```bash
-brew upgrade apoorvdarshan/tap/crossposter
-brew services restart crossposter
-```
-
-### npx Launcher
-
-Use the npx path when you want Crossposter running on localhost without cloning
-the repo or installing a global binary:
-
-```bash
-npx @apoorvdarshan/crossposter@latest
-```
-
-The launcher opens or prints the local URL:
-
-```text
-http://localhost:2004
-```
-
-Run the command from the folder where you want Crossposter data to live. The
-local config, uploads, schedule, and history stay in that folder.
-
-```bash
-mkdir -p ~/Crossposter
-cd ~/Crossposter
-npx @apoorvdarshan/crossposter@latest
-```
-
-If you already have `poster.config.local.json` or `.poster-uploads`, run npx
-from that same folder so the app uses your existing data.
-
-For a persistent command:
-
-```bash
-npm install -g @apoorvdarshan/crossposter
-crossposter
-```
-
-For development from the Git repo:
+### Install
 
 ```bash
 npm install
+./scripts/install-instagram-browser-deps.sh
+```
+
+### Run in debug mode
+```bash
 npm run dev:local
 ```
 
-### Update The Local Package
-
-Homebrew installations are updated only through Homebrew. npm and npx
-installations check npm on startup by default and can also update from Settings
-> Version & Updates, or run:
+### Update
 
 ```bash
-npx @apoorvdarshan/crossposter@latest
+git pull --rebase
+npm i
 ```
 
 Turn off startup update checks from Settings by setting **Auto-update on launch**
@@ -217,43 +154,6 @@ the local service.
 
 ```bash
 POSTER_LOCAL_PORT=2080 npx @apoorvdarshan/crossposter@latest
-```
-
-### macOS Auto-Start
-
-For a Homebrew installation, use Homebrew's managed service:
-
-```bash
-brew services start crossposter
-```
-
-For an npm or npx installation, install Crossposter's launchd service:
-
-```bash
-crossposter install-service
-```
-
-You can also control it from:
-
-```text
-Settings > Local Settings > Auto-start
-```
-
-Turn on **Always restart localhost** and macOS will keep
-`http://localhost:2004` available after login/restart.
-
-Use a custom port once:
-
-```bash
-crossposter install-service --port 2080
-```
-
-Remove the service:
-
-```bash
-brew services stop crossposter
-# npm/npx installation:
-crossposter uninstall-service
 ```
 
 ## Configuration
@@ -655,63 +555,8 @@ The composer can convert and compress media before publishing:
   channel's media problem
 - Dribbble image warnings can open a cropper that outputs a valid 800x600 JPG
 
-## Static Website
-
-The `web/` folder contains a standalone static docs website with overview,
-quickstart, provider setup, limits, privacy, and terms sections. It is intended
-for a domain such as:
-
-```text
-crossposter.apoorvdarshan.com
-```
-
-Live site:
-
-```text
-https://crossposter.apoorvdarshan.com
-```
-
-The static site is deployed as a Cloudflare Worker with static assets:
-
-```bash
-cd web
-npm install
-npm run build
-npx wrangler dev
-npx wrangler deploy
-```
-
-Cloudflare Workers Builds watches `web/*` on `main`, runs `npm run build` from
-`web/`, and deploys with `npx wrangler deploy`. Wrangler publishes `web/dist/`
-and routes `crossposter.apoorvdarshan.com` to the Worker.
-
-Files:
-
-```text
-web/index.html
-web/assets/logo-crossposter.png
-wrangler.jsonc
-```
-
-Privacy and terms are published inside `web/index.html` so the static website is
-the canonical policy page.
 
 ## Deploy
-
-### Vercel
-
-```bash
-vercel
-```
-
-Set environment variables in Vercel Project Settings. At minimum:
-
-```text
-POSTER_ADMIN_PASSWORD
-POSTER_REQUIRE_ADMIN_PASSWORD=true
-```
-
-Then add provider credentials only for the channels you want to use.
 
 ### Render Or VPS
 
@@ -742,25 +587,12 @@ Before exposing it publicly:
 
 ## Contact And Support
 
-- Email: apoorvdarshan@gmail.com
-- Email: ad13dtu@gmail.com
-- X: https://x.com/apoorvdarshan
-- Report an issue: https://github.com/apoorvdarshan/crossposter/issues/new
-- Request a feature: https://github.com/apoorvdarshan/crossposter/issues/new
-- View open issues: https://github.com/apoorvdarshan/crossposter/issues
+- Email: info@dyne.org
+- X: https://x.com/DyneOrg
+- Report an issue: https://github.com/dyne/crossposter/issues/new
 
 Do not post API keys, tokens, app secrets, or private account details in public
 issues.
-
-## Star History
-
-<a href="https://github.com/apoorvdarshan/crossposter/stargazers">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=dark&amp;v=3" />
-    <source media="(prefers-color-scheme: light)" srcset="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=3" />
-    <img alt="Crossposter GitHub star history" src="https://crossposter.apoorvdarshan.com/api/star-history.svg?theme=light&amp;v=3" />
-  </picture>
-</a>
 
 ## Development
 
