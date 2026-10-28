@@ -9,11 +9,11 @@ import { publishNostr } from "@/lib/providers/nostr";
 import { publishPinterest } from "@/lib/providers/pinterest";
 import { publishX } from "@/lib/providers/x";
 import { publishYouTube } from "@/lib/providers/youtube";
-import type { Platform, ProviderContext, PublishResult } from "@/lib/types";
+import type { ProviderRegistry } from "@/lib/publishing/provider";
 
-type Provider = (ctx: ProviderContext) => Promise<PublishResult>;
+export type { Provider, ProviderRegistry } from "@/lib/publishing/provider";
 
-export const providers: Record<Platform, Provider> = {
+export const providers = {
   x: publishX,
   linkedin: publishLinkedIn,
   bluesky: publishBluesky,
@@ -25,4 +25,4 @@ export const providers: Record<Platform, Provider> = {
   devto: publishDevto,
   hackernews: publishHackerNews,
   nostr: publishNostr
-};
+} satisfies ProviderRegistry;

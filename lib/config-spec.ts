@@ -352,7 +352,7 @@ export const configFields: ConfigField[] = [
   }
 ];
 
-export const requiredConfigByPlatform = configFields.reduce(
+export const requiredConfigByPlatform = configFields.reduce<Record<Platform, string[]>>(
   (acc, field) => {
     field.requiredFor?.forEach((platform) => {
       acc[platform].push(field.name);
@@ -372,5 +372,5 @@ export const requiredConfigByPlatform = configFields.reduce(
     devto: [],
     hackernews: [],
     nostr: []
-  } as Record<Platform, string[]>
+  } satisfies Record<Platform, string[]>
 );

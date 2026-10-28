@@ -1,15 +1,12 @@
-export type Platform =
-  | "x"
-  | "linkedin"
-  | "bluesky"
-  | "mastodon"
-  | "instagram"
-  | "youtube"
-  | "dribbble"
-  | "pinterest"
-  | "devto"
-  | "hackernews"
-  | "nostr";
+import type { Platform } from "@/lib/platform-catalog";
+
+export type { Platform } from "@/lib/platform-catalog";
+
+export type ProviderProfile = {
+  id: string;
+  label: string;
+  values: Record<string, string>;
+};
 
 export type PublishPayload = {
   title?: string;

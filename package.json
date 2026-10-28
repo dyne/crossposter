@@ -26,6 +26,8 @@
     "requirements.txt",
     "tsconfig.json",
     "README.md",
+    "CONTRIBUTING.md",
+    "ARCHITECTURE.md",
     "CHANGELOG.md",
     "LICENSE",
     "AGENT_POSTING.md"
@@ -40,6 +42,10 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:boundaries": "node --test tests/architecture/import-boundaries.test.mjs",
+    "test:e2e": "playwright test",
     "test:browser-verification": "python3 -B -m unittest discover -s tests -p 'test_*.py'"
   },
   "dependencies": {
@@ -56,11 +62,18 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
+    "@playwright/test": "1.64.1",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.3",
     "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vitest/coverage-v8": "5.0.5",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^15.5.28"
+    "eslint-config-next": "^15.5.28",
+    "jsdom": "30.1.3",
+    "vitest": "5.0.5"
   },
   "overrides": {
     "postcss": "^8.5.10"

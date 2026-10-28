@@ -762,6 +762,11 @@ issues.
   </picture>
 </a>
 
+## Development
+
+See [the regression testing guide](tests/README.md) for local checks, isolated
+Chromium smoke tests, and pull-request CI.
+
 ## License
 
 MIT

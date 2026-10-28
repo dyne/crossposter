@@ -42,10 +42,11 @@ Run the published local app without cloning:
 npx @apoorvdarshan/crossposter@latest
 ```
 
-Install dependencies:
+For a source checkout, use Node 22.22.2 or later in the Node 22 line (or Node
+24.15 or later), npm and Python 3. Install the locked dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 Run locally:
@@ -65,10 +66,44 @@ http://localhost:2004
 Run these before opening a pull request:
 
 ```bash
+npm run test:boundaries
+npm run test:unit
+npm run test:coverage
+npm run test:browser-verification
+npm --prefix web run test:worker
 npm run typecheck
 npm run lint
 npm run build
+npm run test:e2e
 ```
+
+Install Chromium once with `npx playwright install chromium` before the browser
+suite; Linux CI uses `--with-deps`. Build before running it and leave port 4173
+free. The tests use disposable data and intercepted provider/network/process
+edges; never supply account credentials or disable those guards. No required
+test may be skipped. The only existing lint warning is the anonymous default
+export in `web/worker/index.mjs`.
+
+See [the regression guide](tests/README.md) for cache options, evidence commands,
+coverage limits and visual comparisons, and [the required scenarios](tests/SCENARIOS.md)
+before changing a behavior assertion. Coverage gates apply independently to
+critical files; the broader report is not a whole-product coverage guarantee.
+Those test files/tools are for a source checkout and are not included in the
+runtime npm package.
+
+## Where to change behavior
+
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, dependency direction,
+provider/profile extension steps and diagnostic entry points. Keep public route
+shapes/statuses, provider IDs, environment names, local JSON/IndexedDB formats
+and existing UI compatible during refactors. Add a regression at the owning
+boundary before deciding a changed contract. The known disagreements are
+documented in [the characterization notes](tests/app/characterization.md).
+
+Before shipping extraction changes, run `npm pack --dry-run --json` and inspect
+that new production modules are present. Build the actual tarball in a temporary
+directory with the locked dependencies available; a checkout build alone does
+not establish that the package contains its imports. Do not publish as a test.
 
 ## Secrets
 
@@ -87,6 +122,7 @@ Good pull requests should:
 - include screenshots for UI changes
 - update docs when setup or behavior changes
 - include focused tests or verification notes when relevant
+- describe any unchanged failure/uncertainty or data compatibility limits
 
 ## Issues And Feature Requests
 

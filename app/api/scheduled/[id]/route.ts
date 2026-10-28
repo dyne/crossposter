@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getScheduledPosts, removeScheduledPost, updateScheduledPost } from "@/lib/local-config";
 import { requestOrigin } from "@/lib/request-origin";
 import { ensureSchedulerStarted } from "@/lib/scheduler";
-import type { ScheduledPost } from "@/lib/types";
+import { findScheduledPost, scheduledQueue } from "@/lib/scheduling/queries";
 
 export const runtime = "nodejs";
 
@@ -17,24 +17,9 @@ type RouteContext = {
   }>;
 };
 
-function findScheduledPost(id: string) {
-  return getScheduledPosts().find((post) => post.id === id);
-}
-
-function scheduledQueue(posts: ScheduledPost[] = getScheduledPosts()) {
-  return posts
-    .filter(
-      (post) =>
-        post.status === "scheduled" ||
-        post.status === "publishing" ||
-        post.status === "failed"
-    )
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-}
-
 export async function PATCH(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const current = findScheduledPost(id);
+  const current = findScheduledPost(getScheduledPosts(), id);
 
   if (!current) {
     return NextResponse.json({ error: "Scheduled post was not found" }, { status: 404 });
@@ -72,13 +57,13 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   return NextResponse.json({
     scheduledPost: updated,
-    scheduledPosts: scheduledQueue()
+    scheduledPosts: scheduledQueue(getScheduledPosts())
   });
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
   const { id } = await context.params;
-  const current = findScheduledPost(id);
+  const current = findScheduledPost(getScheduledPosts(), id);
 
   if (!current) {
     return NextResponse.json({ error: "Scheduled post was not found" }, { status: 404 });

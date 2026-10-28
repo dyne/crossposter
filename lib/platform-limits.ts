@@ -1,4 +1,5 @@
 import type { Platform } from "@/lib/types";
+import { platformLabels } from "@/lib/platform-catalog";
 
 export const blueskyPostTextLimit = 300;
 export const instagramPostTextLimit = 2_200;
@@ -23,20 +24,6 @@ export const pinterestTitleLimit = 100;
 export const youtubeVideoMediaSizeLimit = 256 * 1024 * 1024 * 1024;
 export const pinterestDescriptionLimit = 800;
 export const devtoBodyBytesLimit = 800 * 1024;
-
-const platformLabels: Record<Platform, string> = {
-  x: "X / Twitter",
-  linkedin: "LinkedIn",
-  bluesky: "Bluesky",
-  mastodon: "Mastodon",
-  instagram: "Instagram",
-  youtube: "YouTube",
-  dribbble: "Dribbble",
-  pinterest: "Pinterest",
-  devto: "Dev.to",
-  hackernews: "Hacker News",
-  nostr: "Nostr"
-};
 
 export type DraftLimitIssue = {
   id: string;

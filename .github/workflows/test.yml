@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: npm ci
+      - run: npm run test:boundaries
+      - run: npm run test:unit
+      - run: npm run test:coverage
+      - run: npm run test:browser-verification
+      - run: npm --prefix web run test:worker
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-evidence
+          path: |
+            coverage/
+            test-results/
+          retention-days: 7
