@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <img src="https://crossposter.apoorvdarshan.com/assets/logo-crossposter.png" alt="Crossposter logo" width="120" height="120">
+  <img src="https://dyne.org/crossposter/assets/logo-crossposter.png" alt="Crossposter logo" width="120" height="120">
 </p>
 
 <h1 align="center">Crossposter</h1>
@@ -658,39 +658,42 @@ The composer can convert and compress media before publishing:
 ## Static Website
 
 The `web/` folder contains a standalone static docs website with overview,
-quickstart, provider setup, limits, privacy, and terms sections. It is intended
-for a domain such as:
+quickstart, provider setup, limits, privacy, and terms sections. Its public URL is:
 
 ```text
-crossposter.apoorvdarshan.com
+https://dyne.org/crossposter/
 ```
 
-Live site:
-
-```text
-https://crossposter.apoorvdarshan.com
-```
-
-The static site is deployed as a Cloudflare Worker with static assets:
+Build the static files locally with Node 22 or later (no dependency install is
+needed for this build):
 
 ```bash
-cd web
-npm install
-npm run build
-npx wrangler dev
-npx wrangler deploy
+npm --prefix web run build
 ```
 
-Cloudflare Workers Builds watches `web/*` on `main`, runs `npm run build` from
-`web/`, and deploys with `npx wrangler deploy`. Wrangler publishes `web/dist/`
-and routes `crossposter.apoorvdarshan.com` to the Worker.
+`.github/workflows/deploy-web.yml` builds `web/dist/` and deploys it to GitHub
+Pages when `web/**` or the workflow changes on `main`. Pull requests build the
+site without deploying; the workflow can also be run manually on `main`.
+In repository **Settings → Pages**, select **GitHub Actions** as the source.
+The dyne.org Pages domain supplies the `/crossposter/` project path; do not add
+a project-level `CNAME` for that subpath. The workflow uses GitHub's built-in
+token and Pages OIDC permissions, with no Cloudflare credentials.
+
+The HTML base path, canonical/social metadata, robots sitemap link and sitemap
+use `https://dyne.org/crossposter/`. For local preview, serve `web/dist/` at
+`/crossposter/` so relative assets resolve the same way as production.
+
+The optional legacy Cloudflare Worker and `web/wrangler.jsonc` remain for the
+dynamic star-history SVG used below. GitHub Pages serves static files and does
+not run that API. Deploy the legacy Worker separately with `npm run
+deploy:worker` from `web/`; it is not part of the docs Pages deployment.
 
 Files:
 
 ```text
 web/index.html
 web/assets/logo-crossposter.png
-wrangler.jsonc
+.github/workflows/deploy-web.yml
 ```
 
 Privacy and terms are published inside `web/index.html` so the static website is
