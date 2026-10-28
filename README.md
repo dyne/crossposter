@@ -555,6 +555,25 @@ The composer can convert and compress media before publishing:
   channel's media problem
 - Dribbble image warnings can open a cropper that outputs a valid 800x600 JPG
 
+## Static Website
+
+The standalone docs in `web/` are published at
+[dyne.org/crossposter](https://dyne.org/crossposter/).
+
+```bash
+npm --prefix web run build
+```
+
+`.github/workflows/deploy-web.yml` builds `web/dist/` for pull requests and
+publishes it to GitHub Pages when `web/**` or the workflow changes on `main`.
+It can also be run manually on `main`. Repository Pages settings must use
+**GitHub Actions** as the publishing source; no Cloudflare credentials are needed.
+The HTML base path and canonical/social metadata use `/crossposter/`.
+
+For local preview, serve `web/dist/` at `/crossposter/` so relative assets
+resolve as they do in production. The optional legacy Cloudflare Worker is
+separate and can be deployed from `web/` with `npm run deploy:worker`.
+
 
 ## Deploy
 
