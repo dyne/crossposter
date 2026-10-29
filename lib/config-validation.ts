@@ -83,6 +83,19 @@ function invalidReason(name: string, value: string): string | null {
     return value.length >= 8 && !hasWhitespace(value) ? null : "must be a token/key with no spaces";
   }
 
+  if (/^(X|INSTAGRAM)_BROWSER_LOGIN_HEADLESS$/.test(name)) {
+    return value === "true" || value === "false" ? null : "must be true or false";
+  }
+  if (/^(X|INSTAGRAM)_BROWSER_CHANNEL$/.test(name)) {
+    return ["auto", "chrome", "chromium"].includes(value) ? null : "must be auto, chrome or chromium";
+  }
+  if (/^(X|INSTAGRAM)_BROWSER_LOCALE$/.test(name)) {
+    return /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(value) ? null : "must be a language tag such as en-GB";
+  }
+  if (/^(X|INSTAGRAM)_BROWSER_VIEWPORT$/.test(name)) {
+    return /^[1-9][0-9]{2,3}x[1-9][0-9]{2,3}$/.test(value) ? null : "must be WIDTHxHEIGHT (100–9999 each)";
+  }
+
   switch (name) {
     case "POSTER_REQUIRE_ADMIN_PASSWORD":
       return value === "true" || value === "false" ? null : "must be true or false";

@@ -10,6 +10,24 @@ export type ConfigField = {
   showFor?: Platform[];
 };
 
+function browserSessionFields(platform: "x" | "instagram", label: string): ConfigField[] {
+  const prefix = platform.toUpperCase();
+  return [
+    { name: `${prefix}_BROWSER_LOGIN_HEADLESS`, label: `${label} login headless`, defaultValue: "false",
+      help: "Set true to reuse a saved session or try the login credentials below without a window. Use false for interactive 2FA or account verification." },
+    { name: `${prefix}_BROWSER_LOGIN_USERNAME`, label: `${label} login username`,
+      help: "Optional username/email for headless login. Not needed when this browser profile is already signed in." },
+    { name: `${prefix}_BROWSER_LOGIN_PASSWORD`, label: `${label} login password`, secret: true,
+      help: "Optional headless-login password, stored locally. Clear it after saving a session if you prefer. Never included in process arguments." },
+    { name: `${prefix}_BROWSER_CHANNEL`, label: `${label} browser channel`, defaultValue: "auto",
+      help: "auto prefers installed Chrome and falls back to bundled Chromium. Set chrome or chromium to select explicitly." },
+    { name: `${prefix}_BROWSER_LOCALE`, label: `${label} browser locale`,
+      help: "Optional language tag such as en-GB. Leave blank for the browser default." },
+    { name: `${prefix}_BROWSER_VIEWPORT`, label: `${label} browser viewport`,
+      help: "Optional WIDTHxHEIGHT, for example 1440x900. Leave blank to use the browser window without a fixed viewport." }
+  ].map((field) => ({ ...field, showFor: [platform] }));
+}
+
 export const configFields: ConfigField[] = [
   {
     name: "POSTER_ADMIN_PASSWORD",
@@ -86,6 +104,7 @@ export const configFields: ConfigField[] = [
     defaultValue: "true",
     showFor: ["instagram"]
   },
+  ...browserSessionFields("instagram", "Instagram"),
   {
     name: "INSTAGRAM_BROWSER_TIMEOUT_MS",
     label: "Instagram browser timeout",
@@ -330,6 +349,7 @@ export const configFields: ConfigField[] = [
     defaultValue: "true",
     showFor: ["x"]
   },
+  ...browserSessionFields("x", "X"),
   {
     name: "X_BROWSER_TIMEOUT_MS",
     label: "X browser timeout",

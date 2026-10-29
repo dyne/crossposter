@@ -91,7 +91,11 @@ export async function runInstagramScript(
         maxBuffer: 1024 * 1024,
         env: {
           ...process.env,
-          PYTHONUNBUFFERED: "1"
+          PYTHONUNBUFFERED: "1",
+          ...Object.fromEntries([
+            "INSTAGRAM_BROWSER_CHANNEL", "INSTAGRAM_BROWSER_LOCALE", "INSTAGRAM_BROWSER_VIEWPORT",
+            "INSTAGRAM_BROWSER_LOGIN_USERNAME", "INSTAGRAM_BROWSER_LOGIN_PASSWORD"
+          ].map((name) => [name, optionalEnv(name, profileId) ?? ""]))
         }
       },
       (error, stdout, stderr) => {
@@ -116,18 +120,15 @@ export async function runInstagramScript(
   });
 }
 
-/**
- * Opens a visible Chromium window for a one-time Instagram login and persists
- * the session into this profile's browser data directory. Headless publishing
- * reuses that saved session afterward.
- */
+/** Log in visibly by default, or headlessly when explicitly configured. */
 export async function loginInstagramBrowser(profileId?: string): Promise<InstagramRunnerResult> {
   const userDataDir = instagramBrowserProfileDir(profileId);
   const timeout = instagramBrowserTimeout(profileId);
   const scriptPath = appPath("scripts", "instagram_browser_login.py");
 
   return runInstagramScript(
-    [scriptPath, "--user-data-dir", userDataDir, "--timeout-ms", String(timeout)],
+    [scriptPath, "--user-data-dir", userDataDir, "--timeout-ms", String(timeout),
+      "--headless", optionalEnv("INSTAGRAM_BROWSER_LOGIN_HEADLESS", profileId)?.trim() === "true" ? "true" : "false"],
     timeout,
     profileId
   );

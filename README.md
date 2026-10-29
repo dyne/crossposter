@@ -179,7 +179,7 @@ POSTER_ADMIN_PASSWORD=strong-password-here
 ### X / Twitter
 
 X publishing drives a **dedicated, isolated headless browser** — the same
-approach as Instagram. You log in once in a separate window, the session is
+approach as Instagram. By default, you log in once in a separate window; the session is
 saved into an isolated per-profile folder (never your personal Chrome), and
 posts are then typed and sent through **X's own web composer**, headlessly.
 Because X's own frontend generates and signs the request, this avoids the
@@ -322,12 +322,37 @@ https://mastodon.social
 
 Mastodon post text is limited to 500 characters.
 
+### Browser login and defaults (X / Instagram)
+
+Login mode is configured separately from publishing mode. Visible login is the
+default and supports 2FA and account challenges. For an unattended login attempt, set
+`X_BROWSER_LOGIN_HEADLESS=true` or `INSTAGRAM_BROWSER_LOGIN_HEADLESS=true` in
+that profile's Settings. Existing signed-in profiles need no credentials.
+For a new session, fill the corresponding `*_BROWSER_LOGIN_USERNAME` and
+`*_BROWSER_LOGIN_PASSWORD` fields. Credentials are saved locally, masked in
+Settings, and passed to the helper through its environment rather than command
+arguments. You can clear the password once the session has been saved.
+
+Headless login submits the ordinary sign-in form. It cannot complete interactive
+2FA, CAPTCHA or account verification; it returns guidance to turn login headless
+off and finish in a visible browser. Posting still uses `*_BROWSER_HEADLESS`
+independently.
+
+Both login and publishing use the browser's own user agent, default locale and
+native window size, without custom automation-related launch flags. Optional
+per-profile settings are `*_BROWSER_CHANNEL` (`auto`, `chrome`, `chromium`),
+`*_BROWSER_LOCALE` (for example `it-IT`) and `*_BROWSER_VIEWPORT` (for example
+`1440x900`). Blank locale/viewport values keep browser defaults. `auto` prefers
+installed Chrome and falls back to bundled Chromium; explicit channels do not
+fall back. CLI login helpers also accept `--headless true`; preferences and
+credentials use the same environment variable names from `.env.example`.
+
 ### Instagram
 
 Instagram publishing is unofficial local posting through a dedicated, isolated
 headless browser with a one-time login per account, using its own profile folder
 (separate from your own Chrome profile). It reuses your real signed-in session
-(no stored password) and posts invisibly. It is still automation, not an official
+(without requiring stored credentials) and posts invisibly by default. It is still automation, not an official
 API, so use it for accounts you own and keep posting human-paced.
 
 It prefers your installed **Google Chrome** (run in a separate, isolated profile),

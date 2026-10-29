@@ -131,7 +131,7 @@ export function ProviderSettings({ config }: { config: Pick<SettingsConfig, "fie
                       disabled={Boolean(connectingInstagram)}
                     >
                       <RefreshCw size={15} />
-                      {connectingInstagram === profile.id ? "Opening browser..." : "Log in to Instagram"}
+                      {connectingInstagram === profile.id ? "Logging in..." : "Log in to Instagram"}
                     </button>
                   ) : null}
                   {platform.id === "x" ? (
@@ -142,7 +142,7 @@ export function ProviderSettings({ config }: { config: Pick<SettingsConfig, "fie
                       disabled={Boolean(connectingX)}
                     >
                       <RefreshCw size={15} />
-                      {connectingX === profile.id ? "Opening browser..." : "Log in to X"}
+                      {connectingX === profile.id ? "Logging in..." : "Log in to X"}
                     </button>
                   ) : null}
                   {platform.id === "hackernews" ? (
@@ -202,6 +202,8 @@ export function ProviderSettings({ config }: { config: Pick<SettingsConfig, "fie
               {providerFields.map((field) => {
                 const fieldValue = profile.values[field.name] || field.defaultValue || "";
                 const isBooleanField =
+                  field.name === "X_BROWSER_LOGIN_HEADLESS" ||
+                  field.name === "INSTAGRAM_BROWSER_LOGIN_HEADLESS" ||
                   field.name === "X_PREMIUM_LONG_POSTS" ||
                   field.name === "DRIBBBLE_LOW_PROFILE" ||
                   field.name === "PINTEREST_HEADLESS" ||
@@ -230,7 +232,9 @@ export function ProviderSettings({ config }: { config: Pick<SettingsConfig, "fie
                           type="checkbox"
                         />
                         <span>
-                          {field.name === "DRIBBBLE_LOW_PROFILE"
+                          {field.name.endsWith("_BROWSER_LOGIN_HEADLESS")
+                            ? fieldValue === "true" ? "Headless login" : "Visible login"
+                            : field.name === "DRIBBBLE_LOW_PROFILE"
                             ? fieldValue === "true"
                               ? "Publish as Low Profile"
                               : "Normal shot profile"
@@ -328,7 +332,7 @@ export function ProviderSettings({ config }: { config: Pick<SettingsConfig, "fie
                 </p>
                 <p className="hint">
                   Instagram and X / Twitter sign in to a dedicated, isolated browser once per
-                  account and reuse that real session, so there is no stored password. It is still
+                  account and reuse that session. Optional headless-login credentials stay local. It is still
                   automation, not an official API.
                 </p>
                 <p className="hint">

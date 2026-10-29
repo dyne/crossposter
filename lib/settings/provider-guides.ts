@@ -132,7 +132,9 @@ export const setupGuides: Partial<Record<Platform, SetupGuide>> = {
       "Install the browser engine in Terminal with crossposter install-instagram-browser-deps, or ./scripts/install-instagram-browser-deps.sh when working from the Git repo (the X method reuses the same engine).",
       "Add one X / Twitter profile here for each X account.",
       "Set X browser profile folder to a unique folder per account, for example .x-browser/apoorvdarshan.",
-      "Click Log in to X. A real browser window opens once. Sign in (including any 2FA), then it saves the session and closes.",
+      "Click Log in to X for the default visible login, including any 2FA. The session is saved in this profile's folder.",
+      "For login without a window, enable X login headless. A saved session is reused; otherwise supply the optional login username and password. Verification challenges require visible login.",
+      "The browser supplies its own user agent, locale and window size. Channel, locale and viewport overrides are optional.",
       "Keep X browser headless on so future posts run invisibly. Set it to false only to watch the browser if a post fails.",
       "Turn on X Premium media limits only for Premium accounts. It raises the text limit from 280 to 25,000 characters and video size from 512 MB to 16 GB.",
       "Save config, then select X / Twitter on the Dashboard.",
@@ -143,7 +145,7 @@ export const setupGuides: Partial<Record<Platform, SetupGuide>> = {
   instagram: {
     title: "Instagram setup",
     intro:
-      "Unofficial local posting through a dedicated, isolated browser with a one-time login per account, in its own profile folder separate from your own Chrome profile. It reuses your real signed-in session, so there is no stored password. It prefers your installed Google Chrome and falls back to bundled Chromium.",
+      "Unofficial local posting through a dedicated, isolated browser with a one-time login per account, in its own profile folder separate from your own Chrome profile. It reuses your signed-in session; optional credentials for headless login stay local. It prefers your installed Google Chrome and falls back to bundled Chromium.",
     links: [
       { label: "Playwright", href: "https://playwright.dev/python/" },
       { label: "Instagram terms", href: "https://help.instagram.com/581066165581870" }
@@ -152,7 +154,9 @@ export const setupGuides: Partial<Record<Platform, SetupGuide>> = {
       "Install the browser engine in Terminal with crossposter install-instagram-browser-deps, or ./scripts/install-instagram-browser-deps.sh when working from the Git repo.",
       "Add one Instagram profile here for each Instagram account.",
       "Set Instagram browser profile folder to a unique folder per account, for example .instagram-browser/apoorvdarshan.",
-      "Click Log in to Instagram. A real browser window opens once. Sign in (including any 2FA), then it saves the session and closes.",
+      "Click Log in to Instagram for the default visible login, including any 2FA. The session is saved in this profile's folder.",
+      "For login without a window, enable Instagram login headless. A saved session is reused; otherwise supply the optional login username and password. Verification challenges require visible login.",
+      "The browser supplies its own user agent, locale and window size. Channel, locale and viewport overrides are optional.",
       "Keep Instagram browser headless on so future posts run invisibly. Set it to false only to watch the browser if a post fails.",
       "Use the Dashboard Post field as the caption and attach one local JPG, PNG, WebP, MP4, or MOV file before publishing.",
       "Video (MP4/MOV) uploads require Google Chrome installed; bundled Chromium can read images but not H.264 video. Image posts work either way.",

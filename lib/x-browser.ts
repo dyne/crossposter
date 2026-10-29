@@ -90,7 +90,11 @@ export async function runXScript(
         maxBuffer: 1024 * 1024,
         env: {
           ...process.env,
-          PYTHONUNBUFFERED: "1"
+          PYTHONUNBUFFERED: "1",
+          ...Object.fromEntries([
+            "X_BROWSER_CHANNEL", "X_BROWSER_LOCALE", "X_BROWSER_VIEWPORT",
+            "X_BROWSER_LOGIN_USERNAME", "X_BROWSER_LOGIN_PASSWORD"
+          ].map((name) => [name, optionalEnv(name, profileId) ?? ""]))
         }
       },
       (error, stdout, stderr) => {
@@ -115,18 +119,15 @@ export async function runXScript(
   });
 }
 
-/**
- * Opens a visible browser window for a one-time X login and persists the session
- * into this profile's isolated browser data directory. Headless publishing
- * reuses that saved session afterward.
- */
+/** Log in visibly by default, or headlessly when explicitly configured. */
 export async function loginXBrowser(profileId?: string): Promise<XRunnerResult> {
   const userDataDir = xBrowserProfileDir(profileId);
   const timeout = xBrowserTimeout(profileId);
   const scriptPath = appPath("scripts", "x_browser_login.py");
 
   return runXScript(
-    [scriptPath, "--user-data-dir", userDataDir, "--timeout-ms", String(timeout)],
+    [scriptPath, "--user-data-dir", userDataDir, "--timeout-ms", String(timeout),
+      "--headless", optionalEnv("X_BROWSER_LOGIN_HEADLESS", profileId)?.trim() === "true" ? "true" : "false"],
     timeout,
     profileId
   );

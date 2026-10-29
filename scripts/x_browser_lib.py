@@ -6,7 +6,7 @@ a per-profile persistent user-data directory, so each X account has its own
 session and nothing touches the user's personal Chrome profile.
 """
 import json
-from pathlib import Path
+from browser_session import launch_browser
 
 X_ORIGIN = "https://x.com"
 LOGIN_URL = f"{X_ORIGIN}/i/flow/login"
@@ -14,10 +14,7 @@ HOME_URL = f"{X_ORIGIN}/home"
 COMPOSE_URL = f"{X_ORIGIN}/compose/post"
 # X sets auth_token once a session is authenticated.
 LOGGED_IN_COOKIE = "auth_token"
-DESKTOP_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-)
+
 
 
 def emit(payload, code=0):
@@ -45,43 +42,9 @@ def import_playwright():
         )
 
 
-def launch_persistent(playwright, user_data_dir, headless, channel="auto"):
-    """Launches an isolated browser with a persistent per-profile session.
-
-    Prefers the installed Google Chrome ("chrome" channel) because it ships the
-    proprietary codecs (H.264/AAC) X needs to read uploaded video; Playwright's
-    bundled Chromium lacks those and rejects MP4. The per-profile user-data dir
-    keeps each account isolated and separate from the user's own Chrome profile.
-    """
-    path = str(Path(user_data_dir).expanduser())
-    Path(path).mkdir(parents=True, exist_ok=True)
-
-    opts = dict(
-        headless=headless,
-        user_agent=DESKTOP_USER_AGENT,
-        viewport={"width": 1280, "height": 900},
-        locale="en-US",
-        args=["--disable-blink-features=AutomationControlled"],
-    )
-
-    if channel == "chromium":
-        order = [None]
-    elif channel == "chrome":
-        order = ["chrome"]
-    else:
-        order = ["chrome", None]
-
-    last_error = None
-
-    for ch in order:
-        try:
-            if ch:
-                return playwright.chromium.launch_persistent_context(path, channel=ch, **opts)
-            return playwright.chromium.launch_persistent_context(path, **opts)
-        except Exception as exc:
-            last_error = exc
-
-    raise last_error
+def launch_persistent(playwright, user_data_dir, headless, channel=None):
+    """Use the configured channel and browser-native identity/window defaults."""
+    return launch_browser(playwright, user_data_dir, headless, "X", channel)
 
 
 def is_logged_in(context):

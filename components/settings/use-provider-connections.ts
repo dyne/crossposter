@@ -118,7 +118,9 @@ export function useProviderConnections({ values, profiles, activeProfiles, setSt
 
   async function connectInstagram(profile: ProviderProfile) {
     setConnectingInstagram(profile.id);
-    setStatus("A browser window is opening. Sign in to Instagram (including any 2FA), then it saves and closes.");
+    setStatus(profile.values.INSTAGRAM_BROWSER_LOGIN_HEADLESS === "true"
+      ? "Trying headless Instagram login with this profile's saved session or configured credentials."
+      : "A browser window is opening. Sign in to Instagram (including any 2FA), then it saves and closes.");
 
     try {
       const saved = await saveConfig();
@@ -145,7 +147,9 @@ export function useProviderConnections({ values, profiles, activeProfiles, setSt
 
   async function connectX(profile: ProviderProfile) {
     setConnectingX(profile.id);
-    setStatus("A browser window is opening. Sign in to X (including any 2FA), then it saves and closes.");
+    setStatus(profile.values.X_BROWSER_LOGIN_HEADLESS === "true"
+      ? "Trying headless X login with this profile's saved session or configured credentials."
+      : "A browser window is opening. Sign in to X (including any 2FA), then it saves and closes.");
 
     try {
       const saved = await saveConfig();

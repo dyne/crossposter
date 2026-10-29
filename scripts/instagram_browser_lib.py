@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 """Shared helpers for the Instagram Playwright login and publish scripts.
 
-Both scripts drive a dedicated, isolated Chromium (Playwright's bundled browser)
+Both scripts drive a dedicated, isolated Chrome or bundled Chromium
 with a per-profile persistent user-data directory, so each Instagram account has
 its own session and nothing touches the user's personal Chrome.
 """
 import json
-from pathlib import Path
+from browser_session import launch_browser
 
 INSTAGRAM_ORIGIN = "https://www.instagram.com"
 LOGIN_URL = f"{INSTAGRAM_ORIGIN}/accounts/login/"
 HOME_URL = f"{INSTAGRAM_ORIGIN}/"
 LOGGED_IN_COOKIE = "ds_user_id"
-DESKTOP_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-)
+
 
 
 def emit(payload, code=0):
@@ -42,45 +39,9 @@ def import_playwright():
         )
 
 
-def launch_persistent(playwright, user_data_dir, headless, channel="auto"):
-    """Launches an isolated browser with a persistent per-profile session.
-
-    Prefers the installed Google Chrome ("chrome" channel) because it ships the
-    proprietary codecs (H.264/AAC) Instagram needs to read uploaded video.
-    Playwright's bundled Chromium lacks those codecs and rejects MP4 video with
-    "could not be read by your browser", so it is only the fallback when Chrome
-    is not installed. The per-profile user-data dir keeps each account isolated
-    and separate from the user's own Chrome profile either way.
-    """
-    path = str(Path(user_data_dir).expanduser())
-    Path(path).mkdir(parents=True, exist_ok=True)
-
-    opts = dict(
-        headless=headless,
-        user_agent=DESKTOP_USER_AGENT,
-        viewport={"width": 1280, "height": 900},
-        locale="en-US",
-        args=["--disable-blink-features=AutomationControlled"],
-    )
-
-    if channel == "chromium":
-        order = [None]
-    elif channel == "chrome":
-        order = ["chrome"]
-    else:
-        order = ["chrome", None]
-
-    last_error = None
-
-    for ch in order:
-        try:
-            if ch:
-                return playwright.chromium.launch_persistent_context(path, channel=ch, **opts)
-            return playwright.chromium.launch_persistent_context(path, **opts)
-        except Exception as exc:
-            last_error = exc
-
-    raise last_error
+def launch_persistent(playwright, user_data_dir, headless, channel=None):
+    """Use the configured channel and browser-native identity/window defaults."""
+    return launch_browser(playwright, user_data_dir, headless, "INSTAGRAM", channel)
 
 
 def is_logged_in(context):
