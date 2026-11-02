@@ -30,6 +30,7 @@ export function normalizeScheduledPost(value: unknown, defaults: NormalizationDe
   const results = Array.isArray(record.results)
     ? record.results.map(normalizePublishResult).filter((item): item is PublishResult => Boolean(item))
     : [];
+  const authorization = record.authorization as Record<string, unknown> | undefined;
 
   if (
     !Number.isFinite(scheduledAt) ||
@@ -54,6 +55,9 @@ export function normalizeScheduledPost(value: unknown, defaults: NormalizationDe
     ...(media ? { media } : {}),
     status: normalizeScheduledPostStatus(record.status),
     attempts: typeof record.attempts === "number" && record.attempts > 0 ? Math.floor(record.attempts) : 0,
+    ...(authorization && typeof authorization.actionId === "string" && /^[A-Za-z0-9._:-]{1,120}$/.test(authorization.actionId)
+      && typeof authorization.payloadDigest === "string" && /^sha256:[a-f0-9]{64}$/.test(authorization.payloadDigest)
+      ? { authorization: { actionId: authorization.actionId, payloadDigest: authorization.payloadDigest } } : {}),
     ...(typeof record.lastError === "string" && record.lastError
       ? { lastError: record.lastError.slice(0, 1000) }
       : {}),

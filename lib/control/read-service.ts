@@ -56,7 +56,7 @@ export function createControlReadService(deps: ReadDependencies) {
         }
         case "get_post":
         case "list_posts": {
-          const records = (deps.readRecords?.() ?? []).filter((record) => record.action.payload.mode === "publish" && record.action.postId !== null);
+          const records = (deps.readRecords?.() ?? []).filter((record) => record.action.postId !== null);
           if (new Set(records.map((record) => record.action.postId)).size !== records.length) throw new ControlError("storage_corrupt");
           const projectAction = (record: ActionRecord): ControlPost => {
             const action = deps.executionView?.(record.action) ?? record.action;

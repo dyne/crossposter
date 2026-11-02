@@ -136,12 +136,28 @@ ownership modules into a disposable fake backend. It checks HTTP disconnect,
 long simulated provider work and abrupt process restart before/after dispatching
 intent using actual retained files. This establishes worker-process behavior;
 it does not exercise Next's production provider adapter or any live account.
+The same fixture compiles the approved queue service, accepts a scheduled job,
+and kills its worker before dispatch or after durable intent. Restart retains
+the schedule ID/authorization and distinguishes never-dispatched from uncertain
+outcomes without provider replay. Production timer/launcher verification remains
+a separate backend-runtime boundary.
 `control-publication-runtime.test.mjs` additionally exercises the actual Next
 commit/worker/read adapters and incumbent Dev.to provider with a fixture-only
 preload. Only its exact outbound endpoint is intercepted in memory; all other
 network/process IO remains denied. It covers strict base/profile values, HTTP
 disconnect, post-acceptance response-body ambiguity/history, restart, SIGKILL/SIGTERM uncertainty and
 machine-token rotation. No provider network connection is opened.
+
+`control-scheduler-runtime.test.mjs` launches the actual packaged CLI and Next
+production backend with disposable data and intercepted Dev.to IO. It checks
+startup without dashboard requests, overlapping launcher/backend ticks, one
+owner with multiple HTTP attachments, attachment EOF, competing-backend refusal,
+normal shutdown, restart/overdue catch-up, interrupted dispatch, and scheduler
+disable from the environment/data `.env`. The attachment processes are HTTP
+stand-ins; they make no MCP stdio or Codex/Gestalt acceptance claim. A fixture-only
+preload shortens the five-second warmup to 80 ms and thirty-second intervals to 120 ms
+while executing the actual callbacks. All held providers and owned processes
+are released/awaited, fixture ports close, and no user service is installed.
 
 `approval-flows.spec.ts` covers keyboard sign-in/decision, errors, reload,
 concurrent clicks, live expiry and blocked framing. `approval-visual.spec.ts`

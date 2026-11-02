@@ -1,7 +1,7 @@
 import "server-only";
 import type { PublishRunInput, PublishRunResult } from "@/lib/publishing/service";
 import type { ScheduledPost } from "@/lib/types";
-import { dueScheduledPosts, failedExceptionPost, failedPublishPost, publishingPost } from "./policy";
+import { dueScheduledPosts, failedExceptionPost, failedPublishPost, publishingPost, scheduledClaimRevision } from "./policy";
 
 export interface ScheduledQueueStore {
   getScheduledPosts(): ScheduledPost[];
@@ -10,29 +10,36 @@ export interface ScheduledQueueStore {
 }
 
 export type ScheduledClaim =
-  | { kind: "claimed" | "already-publishing"; post: ScheduledPost }
-  | { kind: "skipped"; reason: "missing" | "not-publishing" };
+  | { kind: "claimed"; post: ScheduledPost }
+  | { kind: "skipped"; reason: "missing" | "not-scheduled" | "not-due" | "changed" };
 
 export type ScheduledTickState = { running: boolean };
 
 export type ScheduledTickDependencies = {
   store: ScheduledQueueStore;
   publish: (input: PublishRunInput) => Promise<PublishRunResult>;
+  publishApproved?: (post: ScheduledPost) => Promise<PublishRunResult>;
+  isApproved?: (post: ScheduledPost) => boolean;
+  recover?: () => void;
   now: () => Date;
   state: ScheduledTickState;
 };
 
 // This is a synchronous local update, not a lock or an ownership token.
-export function claimScheduledPost(store: ScheduledQueueStore, id: string, now: Date): ScheduledClaim {
+export function claimScheduledPost(store: ScheduledQueueStore, id: string, now: Date, expected?: ScheduledPost): ScheduledClaim {
   let transitioned = false;
+  let reason: Extract<ScheduledClaim, { kind: "skipped" }>["reason"] = "not-scheduled";
   const saved = store.updateScheduledPost(id, (current) => {
-    transitioned = current.status === "scheduled";
+    if (current.status !== "scheduled") return current;
+    if (!(Date.parse(current.scheduledFor) <= now.getTime())) { reason = "not-due"; return current; }
+    if (expected && scheduledClaimRevision(current) !== scheduledClaimRevision(expected)) { reason = "changed"; return current; }
+    transitioned = true;
     return publishingPost(current, now);
   });
 
   if (!saved) return { kind: "skipped", reason: "missing" };
-  if (saved.status !== "publishing") return { kind: "skipped", reason: "not-publishing" };
-  return { kind: transitioned ? "claimed" : "already-publishing", post: saved };
+  if (!transitioned || saved.status !== "publishing") return { kind: "skipped", reason };
+  return { kind: "claimed", post: saved };
 }
 
 export function createScheduledTickService(dependencies: ScheduledTickDependencies) {
@@ -43,19 +50,21 @@ export function createScheduledTickService(dependencies: ScheduledTickDependenci
     state.running = true;
 
     try {
+      dependencies.recover?.();
       const tickTime = now();
       const due = dueScheduledPosts(store.getScheduledPosts(), tickTime);
       let processed = 0;
 
       for (const post of due) {
-        const claim = claimScheduledPost(store, post.id, tickTime);
+        const claim = claimScheduledPost(store, post.id, now(), post);
         if (claim.kind === "skipped") continue;
 
-        // Preserve the legacy dispatch of already-publishing entries from a stale
-        // due snapshot. The explicit claim result does not add ownership guarantees.
         const locked = claim.post;
+        let retainedResult: PublishRunResult | undefined;
+        let attemptNumber = locked.attempts + 1;
         try {
-          const result = await publish({
+          const approved = locked.authorization || dependencies.isApproved?.(locked);
+          const result = approved ? await (dependencies.publishApproved?.(locked) ?? Promise.reject(new Error("Approved scheduling is unavailable."))) : await publish({
             title: locked.title,
             text: locked.text,
             linkUrl: locked.linkUrl,
@@ -65,17 +74,26 @@ export function createScheduledTickService(dependencies: ScheduledTickDependenci
             requestUrl,
             now: now()
           });
+          retainedResult = result;
           const ok = result.results.some((item) => item.ok);
           const completedAt = now();
 
-          if (ok) {
+          // The complete result is durable in the queue before removal. A
+          // returned history record (or approved action-backed equivalent)
+          // establishes the retained observation after that removal.
+          store.updateScheduledPost(locked.id, (current) => {
+            const completed = failedPublishPost(current, result, completedAt);
+            attemptNumber = completed.attempts; return completed;
+          });
+          if (ok && result.publishedPost) {
             store.removeScheduledPost(locked.id);
-          } else {
-            store.updateScheduledPost(locked.id, (current) => failedPublishPost(current, result, completedAt));
           }
         } catch (error) {
           const failedAt = now();
-          store.updateScheduledPost(locked.id, (current) => failedExceptionPost(current, error, failedAt));
+          store.updateScheduledPost(locked.id, (current) => retainedResult
+            ? { ...failedPublishPost(current, retainedResult, failedAt), attempts: Math.max(current.attempts, attemptNumber),
+              lastError: error instanceof Error ? error.message : "Scheduled result cleanup failed" }
+            : failedExceptionPost(current, error, failedAt));
         }
 
         processed += 1;

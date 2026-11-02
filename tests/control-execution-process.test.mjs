@@ -9,12 +9,12 @@ import { test } from "node:test";
 import ts from "typescript";
 
 const repository = fileURLToPath(new URL("..", import.meta.url));
-async function fixture() {
+async function fixture(scheduled = false) {
   const root = mkdtempSync(path.join(tmpdir(), "crossposter-execution-process-"));
   const data = path.join(root, "data"); mkdirSync(data); symlinkSync(path.join(repository, "node_modules"), path.join(root, "node_modules"), "dir");
   const sources = { "lib/control/backend-ownership.ts": "owner", "lib/control/action-store.ts": "action-store",
     "lib/control/execution-service.ts": "execution-service", "lib/control/contracts.ts": "contracts", "lib/control/canonical.ts": "canonical",
-    "lib/control/errors.ts": "errors", "lib/platform-catalog.ts": "platform-catalog", "lib/storage/durable-json.ts": "durable-json", "lib/storage/json-limits.ts": "json-limits" };
+    "lib/control/errors.ts": "errors", "lib/control/queue-service.ts": "queue-service", "lib/platform-catalog.ts": "platform-catalog", "lib/storage/durable-json.ts": "durable-json", "lib/storage/json-limits.ts": "json-limits" };
   for (const [source, name] of Object.entries(sources)) {
     let compiled = ts.transpileModule(readFileSync(path.join(repository, source), "utf8"), {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }
@@ -32,17 +32,25 @@ async function fixture() {
     import { createActionStore, actionRevision } from "./action-store.mjs";
     import { createExecutionService } from "./execution-service.mjs";
     import { payloadDigest } from "./canonical.mjs";
-    const root = process.argv[2], mode = process.argv[3];
+    import { createApprovedQueue } from "./queue-service.mjs";
+    import { replaceDurableJson } from "./durable-json.mjs";
+    import { existsSync, readFileSync } from "node:fs";
+    const root = process.argv[2], mode = process.argv[3], scheduled = process.argv[4] === "schedule";
     const owner = backendOwner(root), store = createActionStore(root, owner);
     const target = { id: "bluesky:base", platform: "bluesky", profileId: null, label: "Fixture" };
     let clock = Date.now(), calls = 0, release;
     const gate = new Promise(resolve => { release = resolve; });
+    const filename = root + "/poster.config.local.json";
+    if (!existsSync(filename)) replaceDurableJson(filename, { scheduledPosts: [] });
+    const config = () => JSON.parse(readFileSync(filename, "utf8"));
+    const replaceQueue = (id, post) => { owner.assert(); const current = config(); replaceDurableJson(filename,
+      { ...current, scheduledPosts: post ? [...current.scheduledPosts.filter(item => item.id !== id), post] : current.scheduledPosts.filter(item => item.id !== id) }); };
     if (!store.read().length) {
-      const payload = { mode: "publish", content: { title: "", text: "Disposable process fixture", linkUrl: "", mediaId: null },
+      const payload = { mode: scheduled ? "schedule" : "publish", ...(scheduled ? { scheduledFor: new Date(clock + 1000).toISOString() } : {}), content: { title: "", text: "Disposable process fixture", linkUrl: "", mediaId: null },
         targets: [{ ...target, identityRevision: payloadDigest(target) }], media: null, draftRevision: null };
       const action = { id: "process-action", revision: "", payloadDigest: payloadDigest(payload), payload, state: "prepared",
         createdAt: new Date(clock).toISOString(), expiresAt: new Date(clock + 1800000).toISOString(), approvalUrl: "/approvals/process-action",
-        timezone: "Europe/Berlin", scheduledLocal: null, warnings: [], outcomes: [{ target, state: "not_dispatched", message: "Not dispatched", url: null }], postId: null, scheduleId: null };
+        timezone: "Europe/Berlin", scheduledLocal: scheduled ? "Fixture scheduled instant" : null, warnings: [], outcomes: [{ target, state: "not_dispatched", message: "Not dispatched", url: null }], postId: null, scheduleId: null };
       action.revision = actionRevision(action);
       const prepared = store.save({ requestKey: "process-key", inputDigest: payloadDigest({}), action, accountBindings: { [target.id]: payloadDigest({}) } }, null);
       const approved = { ...action, state: "approved" }; approved.revision = actionRevision(approved);
@@ -54,9 +62,10 @@ async function fixture() {
       action.revision = actionRevision(action); store.save({ ...record, action }, record.action.revision);
     }
     const service = createExecutionService({ readRecords: store.read, saveRecord: store.save, assertMutation: owner.assert, now: () => new Date(clock),
+      ...(scheduled ? { queue: createApprovedQueue({ readConfig: config, readRecords: store.read, saveRecord: store.save, assertMutation: owner.assert, now: () => new Date(clock), replace: replaceQueue }) } : {}),
       snapshot: async (record) => {
         if (mode === "before-dispatch" && record.action.state === "executing") { process.send({ event: "claimed" }); await gate; }
-        return { action: record.action, assertUnchanged: () => { owner.assert(); return {}; } };
+        return { action: record.action, assertUnchanged: () => { owner.assert(); return scheduled ? config() : {}; } };
       },
       run: async (record, assertCurrent) => {
         update("executing", "dispatching"); assertCurrent(); calls++; process.send({ event: "dispatching" });
@@ -64,10 +73,21 @@ async function fixture() {
       }
     });
     service.recover();
+    if (scheduled) for (const post of config().scheduledPosts) {
+      if (post.status !== "publishing") continue;
+      const action = service.recoverScheduled(post);
+      if (action) replaceQueue(post.id, { ...post, status: "failed", results: action.outcomes.map(outcome => ({ platform: outcome.target.platform,
+        targetId: outcome.target.id, ok: outcome.state === "succeeded", uncertain: outcome.state === "uncertain", message: outcome.message })) });
+    }
     const server = createServer(async (request, response) => {
       try {
         const action = store.read()[0].action;
-        const result = request.method === "POST" ? await service.commit({ actionId: action.id, expectedDigest: action.payloadDigest }) : action;
+        let result;
+        if (request.url === "/dispatch" && scheduled) {
+          clock = Math.max(clock, Date.parse(action.payload.scheduledFor) + 1);
+          const post = { ...config().scheduledPosts[0], status: "publishing", updatedAt: new Date(clock).toISOString() };
+          replaceQueue(post.id, post); void service.dispatchScheduled(post).catch(() => {}); result = store.read()[0].action;
+        } else result = request.method === "POST" ? await service.commit({ actionId: action.id, expectedDigest: action.payloadDigest }) : action;
         if (request.url === "/disconnect") { response.destroy(); return; }
         response.end(JSON.stringify({ action: result, calls, active: service.active(), now: clock }));
       } catch (error) { response.statusCode = 503; response.end(JSON.stringify({ code: error.code })); }
@@ -79,7 +99,7 @@ async function fixture() {
   writeFileSync(path.join(root, "worker.mjs"), program);
   const children = [];
   async function start(mode = "dispatching") {
-    const child = spawn(process.execPath, [path.join(root, "worker.mjs"), data, mode], { cwd: root, env: { PATH: process.env.PATH }, stdio: ["ignore", "ignore", "pipe", "ipc"] });
+    const child = spawn(process.execPath, [path.join(root, "worker.mjs"), data, mode, scheduled ? "schedule" : "publish"], { cwd: root, env: { PATH: process.env.PATH }, stdio: ["ignore", "ignore", "pipe", "ipc"] });
     const exited = once(child, "exit"); const events = []; let stderr = "";
     child.on("message", (message) => events.push(message)); child.stderr.on("data", (bytes) => { stderr = (stderr + bytes).slice(-2048); });
     const owned = { child, exited, events, stderr: () => stderr }; children.push(owned);
@@ -151,6 +171,28 @@ for (const mode of ["before-dispatch", "dispatching"]) {
       assert.equal(replay.action.outcomes[0].state, mode === "before-dispatch" ? "not_dispatched" : "uncertain");
       const retained = JSON.parse(readFileSync(path.join(f.data, ".poster-actions.json"), "utf8")).records[0].action;
       assert.deepEqual(retained, replay.action); assert.equal(worker.stderr(), "");
+    } finally { if (worker?.child.connected) worker.child.send("release"); await f.dispose(); }
+  });
+}
+
+for (const mode of ["before-dispatch", "dispatching"]) {
+  test(`approved scheduled restart after ${mode} preserves queue identity and never replays a provider`, { timeout: 15000 }, async () => {
+    const f = await fixture(true); let worker;
+    try {
+      worker = await f.start(mode);
+      const accepted = await (await fetch(worker.origin, { method: "POST" })).json(); assert.equal(accepted.action.state, "scheduled"); assert.equal(accepted.calls, 0);
+      const queued = JSON.parse(readFileSync(path.join(f.data, "poster.config.local.json"), "utf8")).scheduledPosts[0];
+      assert.equal(queued.id, accepted.action.scheduleId); assert.equal(queued.authorization.actionId, accepted.action.id);
+      await fetch(worker.origin + "/dispatch", { method: "POST" });
+      await until(() => worker.events.some(event => event.event === (mode === "before-dispatch" ? "claimed" : "dispatching")), "scheduled durable crash boundary", worker);
+      await stop(worker, "SIGKILL"); worker = await f.start();
+      const recovered = await (await fetch(worker.origin, { method: "POST" })).json();
+      assert.equal(recovered.calls, 0); assert.equal(recovered.action.id, accepted.action.id); assert.equal(recovered.action.scheduleId, queued.id);
+      assert.equal(recovered.action.state, "uncertain"); assert.equal(recovered.action.outcomes[0].state, mode === "before-dispatch" ? "not_dispatched" : "uncertain");
+      const retained = JSON.parse(readFileSync(path.join(f.data, "poster.config.local.json"), "utf8")).scheduledPosts[0];
+      assert.equal(retained.id, queued.id); assert.deepEqual(retained.authorization, queued.authorization); assert.equal(retained.status, "failed");
+      assert.equal(retained.results.length, 1); assert.equal(retained.results[0].uncertain, mode === "dispatching");
+      assert.equal((await status(worker)).calls, 0); assert.equal(worker.stderr(), "");
     } finally { if (worker?.child.connected) worker.child.send("release"); await f.dispose(); }
   });
 }

@@ -4,6 +4,7 @@ import { getScheduledPosts, removeScheduledPost, updateScheduledPost } from "@/l
 import { requestOrigin } from "@/lib/request-origin";
 import { ensureSchedulerStarted } from "@/lib/scheduler";
 import { findScheduledPost, scheduledQueue } from "@/lib/scheduling/queries";
+import { scheduledClaimRevision } from "@/lib/scheduling/policy";
 
 export const runtime = "nodejs";
 
@@ -44,14 +45,18 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Choose a scheduled time in the future." }, { status: 400 });
   }
 
-  const updated = updateScheduledPost(id, (post) => ({
-    ...post,
-    scheduledFor: new Date(scheduledAt).toISOString(),
-    updatedAt: new Date().toISOString(),
-    status: "scheduled",
-    lastError: undefined,
-    results: undefined
-  }));
+  const conflict = Symbol("changed schedule");
+  let updated;
+  try {
+    updated = updateScheduledPost(id, (post) => {
+      if (post.status === "publishing" || post.status === "published" || scheduledClaimRevision(post) !== scheduledClaimRevision(current)) throw conflict;
+      return { ...post, scheduledFor: new Date(scheduledAt).toISOString(), updatedAt: new Date().toISOString(), status: "scheduled", lastError: undefined, results: undefined };
+    });
+  } catch (error) {
+    if (error !== conflict) throw error;
+    return NextResponse.json({ error: "This scheduled post can no longer be rescheduled." }, { status: 400 });
+  }
+  if (!updated) return NextResponse.json({ error: "Scheduled post was not found" }, { status: 404 });
 
   ensureSchedulerStarted(new URL("/api/scheduled/tick", requestOrigin(request)).toString());
 

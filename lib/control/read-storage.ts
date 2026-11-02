@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, lstatSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod-control";
-import { platformSchema, timestampSchema } from "./contracts";
+import { digestSchema, idSchema, platformSchema, timestampSchema } from "./contracts";
 import { ControlError } from "./errors";
 import { mediaFilePath } from "@/lib/storage/media-path";
 import { resolveContentType, mediaKind } from "@/lib/storage/media-service";
@@ -30,7 +30,8 @@ const queuedPost = z.object({ ...storedContent, id: z.string().min(1).max(180),
   createdAt: timestampSchema, updatedAt: timestampSchema, scheduledFor: timestampSchema,
   status: z.enum(["scheduled", "publishing", "published", "failed", "canceled"]),
   attempts: z.number().int().nonnegative(), results: z.array(storedResult).max(30).optional(),
-  publishedPostId: z.string().min(1).max(180).optional() });
+  publishedPostId: z.string().min(1).max(180).optional(),
+  authorization: z.strictObject({ actionId: idSchema, payloadDigest: digestSchema }).optional() });
 const profile = z.object({ id: z.string().min(1).max(120), label: z.string().min(1).max(180),
   values: z.record(z.string(), z.string()) });
 const configSchema = z.object({

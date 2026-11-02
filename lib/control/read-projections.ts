@@ -122,7 +122,7 @@ export function projectControlDraft(config: ControlReadConfig, dto: ReturnType<t
 export function projectControlSchedule(post: QueuedPost, dto: ReturnType<typeof projectControlConfig>) {
   const projected = { id: post.id, createdAt: new Date(post.createdAt).toISOString(), updatedAt: new Date(post.updatedAt).toISOString(),
     scheduledFor: new Date(post.scheduledFor).toISOString(), content: dto.content(post), ...dto.retained(post),
-    status: post.status, attempts: post.attempts, actionId: null, publishedPostId: post.publishedPostId ?? null };
+    status: post.status, attempts: post.attempts, actionId: post.authorization?.actionId ?? null, publishedPostId: post.publishedPostId ?? null };
   return { ...projected, revision: payloadDigest(projected) };
 }
 

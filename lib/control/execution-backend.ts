@@ -8,7 +8,8 @@ import { readControlCredential } from "./auth";
 import { ControlError } from "./errors";
 import { providers } from "@/lib/providers";
 import { getUploadedMedia } from "@/lib/media-store";
-import { appendPublishedPost } from "@/lib/local-config";
+import { appendPublishedPost, upsertScheduledPost, removeScheduledPost } from "@/lib/local-config";
+import { createApprovedQueue } from "./queue-service";
 
 export function backendExecution(root: string, token: string) {
   const existing = executionBackends.get(root);
@@ -23,7 +24,10 @@ export function backendExecution(root: string, token: string) {
     const backend = createExecutionService({ ...deps, snapshot: async (record) => {
       const snapshot = await actions.executionSnapshot(record);
       return { ...snapshot, assertUnchanged: () => { assertContext(); return snapshot.assertUnchanged(); } };
-    }, run });
+    }, run, queue: createApprovedQueue({ ...deps, replace: (id, post) => {
+      assertContext();
+      if (post) upsertScheduledPost(post); else removeScheduledPost(id);
+    } }) });
     executionBackends.set(root, { token, service: backend });
   }
   return executionBackends.get(root)!.service;
