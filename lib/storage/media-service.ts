@@ -1,13 +1,19 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { imageSize } from "image-size";
-import { formatLimitBytes, xPremiumVideoMediaSizeLimit, youtubeVideoMediaSizeLimit } from "@/lib/platform-limits";
+import { formatLimitBytes, storedMediaSizeLimit } from "@/lib/platform-limits";
 import type { MediaStorage } from "./media-storage";
 import type { MediaKind, UploadedMedia, StoredMedia } from "./media-types";
 
-const maxMediaSize = Math.max(xPremiumVideoMediaSizeLimit, youtubeVideoMediaSizeLimit);
+const maxMediaSize = storedMediaSizeLimit;
+export class MediaUploadError extends Error {}
+export type StreamMediaInput = {
+  filename: string; contentType: string; size: number; stream: ReadableStream<Uint8Array>;
+  maxBytes: number; timeoutMs: number; signal?: AbortSignal;
+};
 
 function cleanFilename(filename: string): string {
   const cleaned = filename.replace(/[^\w.\- ]+/g, "").trim();
@@ -77,6 +83,70 @@ function mediaUrl(id: string, requestUrl: string): string {
 }
 
 export function createMediaStore<Stream extends Readable>(storage: MediaStorage<Stream>, createId: () => string = randomUUID) {
+  async function saveStreamedMedia(input: StreamMediaInput, requestUrl: string): Promise<UploadedMedia> {
+    const filename = cleanFilename(input.filename);
+    const contentType = resolveContentType(filename, input.contentType);
+    const kind = mediaKind(contentType);
+    if (!Number.isSafeInteger(input.size) || input.size <= 0 || input.size > Math.min(input.maxBytes, maxMediaSize)
+      || kind === "file" || !/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i.test(contentType)
+      || !Number.isSafeInteger(input.maxBytes) || input.maxBytes <= 0 || input.maxBytes > maxMediaSize
+      || !Number.isSafeInteger(input.timeoutMs) || input.timeoutMs <= 0 || input.signal?.aborted) throw new MediaUploadError("Invalid media upload");
+    if (!storage.beginStreamUpload) throw new Error("Streaming storage unavailable");
+    const id = `${createId()}${extensionFromFilename(filename)}`;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    input.signal?.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(abort, input.timeoutMs);
+    let upload: Awaited<ReturnType<NonNullable<MediaStorage["beginStreamUpload"]>>> | undefined;
+    let source: Readable | undefined; let bounded: Transform | undefined;
+    let feeding: Promise<void> | undefined; let writing: Promise<void> | undefined;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      upload = await storage.beginStreamUpload(id);
+      if (controller.signal.aborted) throw new MediaUploadError("Interrupted media upload");
+      const hash = createHash("sha256"); const header: Buffer[] = []; let headerBytes = 0; let size = 0;
+      reader = input.stream.getReader();
+      const incoming = reader;
+      const body = new ReadableStream<Uint8Array>({
+        async pull(target) {
+          try { const next = await incoming.read(); if (next.done) target.close(); else target.enqueue(next.value); }
+          catch { target.error(new MediaUploadError("Interrupted media upload")); }
+        },
+        cancel: (reason) => incoming.cancel(reason)
+      });
+      source = Readable.fromWeb(body as Parameters<typeof Readable.fromWeb>[0], { signal: controller.signal });
+      bounded = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          size += chunk.length;
+          if (size > input.size || size > input.maxBytes) { callback(new MediaUploadError("Media upload exceeds its bound")); return; }
+          hash.update(chunk);
+          if (headerBytes < 1024 * 1024) { const part = Buffer.from(chunk).subarray(0, 1024 * 1024 - headerBytes); header.push(part); headerBytes += part.length; }
+          callback(null, chunk);
+        },
+        flush(callback) { callback(size === input.size ? null : new MediaUploadError("Incomplete media upload")); }
+      });
+      feeding = pipeline(source, bounded, { signal: controller.signal });
+      writing = upload.write(bounded);
+      await Promise.all([feeding, writing]);
+      let dimensions: { width: number; height: number } | undefined;
+      if (kind === "image") { try { const found = imageSize(Buffer.concat(header)); dimensions = { width: found.width, height: found.height }; } catch { /* required provider dimensions are checked at preparation */ } }
+      const stored: StoredMedia = { id, filename, contentType, size, kind, path: upload.path,
+        digest: `sha256:${hash.digest("hex")}`, ...(dimensions ?? {}) };
+      if (controller.signal.aborted) throw new MediaUploadError("Interrupted media upload");
+      await upload.commit(stored);
+      if (controller.signal.aborted) throw new MediaUploadError("Interrupted media upload");
+      return { ...stored, url: mediaUrl(id, requestUrl) };
+    } catch (error) {
+      source?.destroy(); bounded?.destroy();
+      await Promise.allSettled([feeding, writing]);
+      if (upload) await upload.discard();
+      if (controller.signal.aborted) throw new MediaUploadError("Interrupted media upload");
+      throw error;
+    } finally {
+      clearTimeout(timer); input.signal?.removeEventListener("abort", abort);
+      if (reader) { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
+    }
+  }
   async function readImageDimensions(id: string, kind: MediaKind) {
     if (kind !== "image") {
       return {};
@@ -164,6 +234,7 @@ export function createMediaStore<Stream extends Readable>(storage: MediaStorage<
   }
 
   return {
+    saveStreamedMedia,
     saveUploadedMedia,
     getUploadedMedia,
     openUploadedMedia,

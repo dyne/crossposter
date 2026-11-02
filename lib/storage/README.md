@@ -24,6 +24,32 @@ image dimensions. Its media adapter handles bytes and metadata files under
 the current path from the metadata ID and obtains the size from the actual file.
 Stored paths, kinds and sizes are not treated as authoritative during lookup.
 
+Control's raw streaming upload uses the same media service with a configured
+size/deadline, exact chunk count and SHA256 digest. It retains at most one MiB
+for image-header inspection. The filesystem adapter uses private `.incoming-*`
+staging and exclusive final links; successful uploads add optional `digest` to
+the incumbent metadata format. Strict control lookup recomputes it from actual
+bytes and rejects mismatches. Legacy metadata without a digest remains readable
+and its current bytes are still hashed for preparation. Interrupted/failed
+owned uploads clean their staging and partial links. Ownership loss and abrupt
+death can leave private unreferenced files; these grant no draft, approval or
+publishing authority. Dashboard multipart upload compatibility is unchanged.
+
+Draft replacement now has a narrow shared synchronous service. Both supported
+clients can send an expected revision; a stale write returns a conflict before
+replacing the singleton. The control route resolves explicit targets and stored
+media, checks its existing content/target/time/byte-digest revision, and rechecks
+its dependencies after media IO. The dashboard uses an additive storage revision
+and compatible response fields. Server update times advance on every accepted
+save/clear; supplied timestamps cannot reset the revision or resurrect an old
+draft. The replacement reads current configuration immediately before writing,
+preserving unrelated known history, queue and profile sections.
+Deleted incumbent profile/media references do not prevent acquiring a recovery
+draft revision and clearing/replacing them. That revision binds missing-resource
+state; restoring files/profiles or racing another draft change conflicts. Only
+draft observation uses the missing-file probe; attachment lookup and publication
+remain strict, and corrupt/unreadable state still fails closed.
+
 ## Existing consistency and error limits
 
 ### Control-enabled ownership and durability

@@ -7,6 +7,7 @@ export const fixturePng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1H
 
 type FixtureState = {
   draft: ComposeDraft;
+  draftRevision: number;
   scheduledPosts: ScheduledPost[];
   publishRequests: unknown[];
   publishedPosts: PublishedPost[];
@@ -17,7 +18,7 @@ type FixtureState = {
 export const test = base.extend<{ fixtureState: FixtureState }>({
   fixtureState: async ({ context }, runFixture) => {
     const state: FixtureState = {
-      draft: { title: "", text: "", linkUrl: "", platforms: [], targets: [] },
+      draft: { title: "", text: "", linkUrl: "", platforms: [], targets: [] }, draftRevision: 0,
       scheduledPosts: [], publishRequests: [], publishedPosts: [], mediaUploads: 0
     };
     const unexpected: string[] = [];
@@ -34,9 +35,16 @@ export const test = base.extend<{ fixtureState: FixtureState }>({
       if (url.pathname === "/api/config" && request.method() === "GET") {
         json = { profiles: { bluesky: [{ id: "fixture", label: "Fixture Bluesky", values: { BLUESKY_IDENTIFIER: "fixture.example", BLUESKY_APP_PASSWORD: "fixture-only-token" } }] } };
       } else if (url.pathname === "/api/draft") {
-        if (request.method() === "PUT") state.draft = request.postDataJSON().draft;
+        if (request.method() === "PUT") {
+          const input = request.postDataJSON();
+          if (input.expectedRevision !== `fixture-${state.draftRevision}`) {
+            await route.fulfill({ status: 409, json: { code: "revision_conflict", error: "Draft changed elsewhere." } });
+            return;
+          }
+          state.draft = input.draft; state.draftRevision++;
+        }
         if (request.method() === "DELETE" && url.searchParams.get("scope") === "history") state.publishedPosts = [];
-        json = { draft: state.draft, publishedPosts: state.publishedPosts };
+        json = { draft: state.draft, publishedPosts: state.publishedPosts, revision: `fixture-${state.draftRevision}` };
       } else if (url.pathname === "/api/publish" && request.method() === "POST") {
         state.publishRequests.push(request.postDataJSON());
         json = state.publishResponse || { results: [{ platform: "bluesky", targetId: "bluesky:fixture", profileLabel: "Fixture Bluesky", ok: false, uncertain: true, message: "Fixture outcome unknown; check profile before retrying." }] };

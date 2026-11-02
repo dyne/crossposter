@@ -59,7 +59,7 @@ export default function Home() {
   }, []);
 
   const media = useComposerMedia({
-    onEdit: () => setHasSavedDraft(true),
+    onEdit: () => { setHasSavedDraft(true); draft.detachMedia(); },
     onReplace: () => actions.resetFeedback(),
     setError: (value) => actions.setError(value), setProgress: (value) => actions.setProgress(value), videoTargetBytes: videoTargetBytesForPlatforms
   });
@@ -170,6 +170,7 @@ export default function Home() {
             canPublish={canSubmitDraft} canOpenSchedule={canSubmitDraft} canSchedule={canSchedule} />
 
           <div className="composer">
+            {draft.saveError ? <p className="error-line" role="alert">{draft.saveError}</p> : null}
             <ComposerEditor
               title={title} text={text} linkUrl={linkUrl}
               onTitleChange={(value) => { setHasSavedDraft(true); setTitle(value); }}

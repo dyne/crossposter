@@ -84,7 +84,7 @@ const metadataSchema = z.object({ id: z.string(), filename: z.string().min(1).ma
   kind: z.enum(["image", "video", "audio", "file"]),
   digest: z.string().optional() });
 
-export function controlMediaRevision(root: string, id: string): string {
+export function controlMediaRevision(root: string, id: string, allowMissing = false): string {
   let filename: string;
   try { filename = mediaFilePath(path.join(root, ".poster-uploads"), id); }
   catch { throw new ControlError("media_missing"); }
@@ -92,12 +92,18 @@ export function controlMediaRevision(root: string, id: string): string {
     const directory = lstatSync(path.dirname(filename));
     if (!directory.isDirectory() || directory.isSymbolicLink()) throw new ControlError("storage_corrupt");
     const versions = [filename, `${filename}.json`].map((name) => {
-      const stat = lstatSync(name, { bigint: true });
-      if (!stat.isFile() || stat.isSymbolicLink()) throw new ControlError("storage_corrupt");
-      return [String(stat.dev), String(stat.ino), String(stat.size), String(stat.mtimeNs), String(stat.ctimeNs)];
+      try {
+        const stat = lstatSync(name, { bigint: true });
+        if (!stat.isFile() || stat.isSymbolicLink()) throw new ControlError("storage_corrupt");
+        return [String(stat.dev), String(stat.ino), String(stat.size), String(stat.mtimeNs), String(stat.ctimeNs)];
+      } catch (error) {
+        if (allowMissing && isMissing(error)) return null;
+        throw error;
+      }
     });
     return payloadDigest(versions);
   } catch (error) {
+    if (allowMissing && isMissing(error)) return payloadDigest({ directory: "missing" });
     throw error instanceof ControlError ? error : new ControlError(isMissing(error) ? "media_missing" : "storage_unavailable");
   }
 }

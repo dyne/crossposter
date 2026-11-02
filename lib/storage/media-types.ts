@@ -10,6 +10,7 @@ export type UploadedMedia = {
   url: string;
   width?: number;
   height?: number;
+  digest?: string;
 };
 
 export type StoredMedia = Omit<UploadedMedia, "url">;

@@ -21,7 +21,7 @@ async function draftHook() {
   const { composeClient } = await import("@/lib/compose/client");
   const storage = await import("@/lib/compose/draft-storage");
   vi.spyOn(composeClient, "readDraft").mockResolvedValue({ draft: empty });
-  vi.spyOn(composeClient, "saveDraft").mockResolvedValue(new Response("{}"));
+  vi.spyOn(composeClient, "saveDraft").mockImplementation(async () => new Response("{}"));
   vi.spyOn(storage, "readStoredDraftMedia").mockResolvedValue(null);
   const hydrateMedia = vi.fn();
   const clearMedia = vi.fn(async () => undefined);
@@ -62,12 +62,13 @@ describe("composer draft lifecycle", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Fixture quota"); });
     act(() => view.result.current.setText("Still editable"));
     expect(view.result.current.storageError).toBe("Fixture quota");
-    await waitFor(() => expect(fixture.composeClient.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ text: "Still editable" })));
+    await waitFor(() => expect(fixture.composeClient.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ text: "Still editable" }), undefined));
     expect(view.result.current.text).toBe("Still editable");
   });
 
-  it("ignores delayed obsolete save errors after a newer save has completed", async () => {
+  it("serializes delayed saves and advances the expected server revision without replacing newer edits", async () => {
     const fixture = await draftHook();
+    vi.mocked(fixture.composeClient.readDraft).mockResolvedValue({ draft: empty, revision: "initial" });
     const view = fixture.mount();
     await waitFor(() => expect(view.result.current.draftHydrated).toBe(true));
     vi.useFakeTimers();
@@ -80,9 +81,12 @@ describe("composer draft lifecycle", () => {
       expect(view.result.current.isSavingDraft).toBe(true);
       act(() => view.result.current.setText("Newer edit"));
       await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+      expect(fixture.composeClient.saveDraft).toHaveBeenCalledTimes(1);
+      expect(fixture.composeClient.saveDraft).toHaveBeenLastCalledWith(expect.objectContaining({ text: "Earlier save" }), "initial");
+      await act(async () => older.resolve(Response.json({ revision: "after-first" })));
       expect(fixture.composeClient.saveDraft).toHaveBeenCalledTimes(2);
-      await act(async () => newer.resolve(new Response("{}")));
-      await act(async () => older.reject(new Error("Obsolete failure")));
+      expect(fixture.composeClient.saveDraft).toHaveBeenLastCalledWith(expect.objectContaining({ text: "Newer edit" }), "after-first");
+      await act(async () => newer.resolve(Response.json({ revision: "after-second" })));
       expect(view.result.current.text).toBe("Newer edit");
       expect(view.result.current.saveError).toBe("");
       expect(view.result.current.isSavingDraft).toBe(false);
@@ -114,8 +118,52 @@ describe("composer draft lifecycle", () => {
     expect(view.result.current.text).toBe("");
     expect(view.result.current.selected).toEqual([]);
     expect(fixture.clearMedia).toHaveBeenCalledTimes(1);
-    expect(fixture.composeClient.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ text: "", targets: [], platforms: [] }));
+    expect(fixture.composeClient.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ text: "", targets: [], platforms: [] }), undefined);
     expect(JSON.parse(localStorage.getItem("crossposter:compose-draft:v1")!).text).toBe("");
+  });
+
+  it("retains edits and stops queued and future saves after a conflict", async () => {
+    const f = await draftHook();
+    vi.mocked(f.composeClient.readDraft).mockResolvedValue({ draft: empty, revision: "loaded" });
+    const view = f.mount(); await waitFor(() => expect(view.result.current.draftHydrated).toBe(true));
+    vi.useFakeTimers(); const held = deferred<Response>();
+    vi.mocked(f.composeClient.saveDraft).mockReturnValueOnce(held.promise);
+    try {
+      act(() => view.result.current.setText("First"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+      act(() => view.result.current.setText("Queued"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+      await act(async () => held.resolve(new Response("{}", { status: 409 })));
+      expect(f.composeClient.saveDraft).toHaveBeenCalledTimes(1);
+      expect(view.result.current.saveError).toContain("Draft changed elsewhere");
+      act(() => view.result.current.setText("Keep this edit"));
+      await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+      expect(f.composeClient.saveDraft).toHaveBeenCalledTimes(1);
+      expect(view.result.current.text).toBe("Keep this edit");
+      expect(localStorage.getItem("crossposter:compose-draft:v1")).toContain("Keep this edit");
+    } finally { held.resolve(new Response("{}")); await act(async () => held.promise); view.unmount(); expect(vi.getTimerCount()).toBe(0); }
+  });
+
+  it("uses a versioned server draft over newer browser recovery and retains its attachment on text edits", async () => {
+    const f = await draftHook();
+    localStorage.setItem("crossposter:compose-draft:v1", JSON.stringify({ ...empty, text: "Obsolete browser", updatedAt: "2099-01-01T00:00:00Z" }));
+    const media = { id: "fixture-media", filename: "fixture.png", contentType: "image/png", size: 7, kind: "image" as const, url: "/api/media/fixture-media" };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("fixture", { headers: { "content-type": "image/png" } })));
+    vi.mocked(f.composeClient.readDraft).mockResolvedValue({ draft: { ...empty, text: "MCP", media, updatedAt: "2026-01-01T00:00:00Z" }, revision: "server" });
+    const view = f.mount(); await waitFor(() => expect(view.result.current.draftHydrated).toBe(true));
+    expect(view.result.current.text).toBe("MCP"); expect(f.hydrateMedia.mock.calls[0][0]).toBeInstanceOf(File);
+    act(() => view.result.current.setText("Edited"));
+    await waitFor(() => expect(f.composeClient.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ text: "Edited", media }), "server"));
+  });
+
+  it.each([true, false])("recovers local-only media only when its server revision still matches: %s", async (matches) => {
+    const f = await draftHook();
+    const file = new File(["fixture"], "browser.png", { type: "image/png" });
+    localStorage.setItem("crossposter:compose-draft-server-revision:v1", "previous");
+    vi.mocked(f.storage.readStoredDraftMedia).mockResolvedValue(file);
+    vi.mocked(f.composeClient.readDraft).mockResolvedValue({ draft: { ...empty, updatedAt: "2026-01-01T00:00:00Z" }, revision: matches ? "previous" : "MCP-clear" });
+    const view = f.mount(); await waitFor(() => expect(view.result.current.draftHydrated).toBe(true));
+    expect(f.hydrateMedia).toHaveBeenCalledWith(matches ? file : null);
   });
 });
 

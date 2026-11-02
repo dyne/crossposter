@@ -5,12 +5,16 @@ import { test, expect, fixturePng } from "./fixtures";
 
 const fixedDate = "2026-10-28T12:00:00.000Z";
 const phase = process.env.COMPOSER_VISUAL_PHASE || "after";
+const theme = process.env.COMPOSER_VISUAL_THEME;
 const artifactRoot = path.resolve("output/playwright", `composer-${phase}`);
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
   for (const scale of [1, 2]) {
     test(`composer visual ${viewport.width}x${viewport.height} font ${scale * 100}%`, async ({ page, fixtureState }) => {
       await page.setViewportSize(viewport);
+      if (theme === "light" || theme === "dark") {
+        await page.addInitScript((mode) => localStorage.setItem("crossposter:theme", mode), theme);
+      }
       await page.clock.setFixedTime(new Date(fixedDate));
       await page.goto("/");
       await expect(page.getByText("Profile: Fixture Bluesky")).toBeVisible();
@@ -44,7 +48,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
         await page.screenshot({ path: path.join(artifactRoot, filename), fullPage: true, animations: "disabled" });
         const bytes = readFileSync(path.join(artifactRoot, filename));
         writeFileSync(path.join(artifactRoot, `${filename}.json`), JSON.stringify({
-          filename, phase, viewport, fontScale: scale, computedFonts: fonts,
+          filename, phase, theme: theme || "system", viewport, fontScale: scale, computedFonts: fonts,
           fixedDate, capturedAt: new Date().toISOString(),
           sha256: createHash("sha256").update(bytes).digest("hex"),
           fontMethod: "Each HTML element's baseline computed font-size times scale; no viewport/device/page zoom"

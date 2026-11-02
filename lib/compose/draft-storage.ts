@@ -22,6 +22,13 @@ type StoredDraftMedia = {
 
 const legacyStoragePrefix = ["personal", "crossposter"].join("-");
 const draftStorageKey = "crossposter:compose-draft:v1";
+const draftRevisionKey = "crossposter:compose-draft-server-revision:v1";
+export function readStoredDraftRevision(): string | null {
+  try { return window.localStorage.getItem(draftRevisionKey); } catch { return null; }
+}
+export function writeStoredDraftRevision(revision: string): void {
+  window.localStorage.setItem(draftRevisionKey, revision);
+}
 const legacyDraftStorageKey = `${legacyStoragePrefix}:compose-draft:v1`;
 const draftDbName = "crossposter-drafts";
 const legacyDraftDbName = `${legacyStoragePrefix}-drafts`;

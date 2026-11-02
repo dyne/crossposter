@@ -138,12 +138,59 @@ test("production preparations replay after backend restart, reads stay pure and 
     assert.equal(readFileSync(path.join(data, "poster.config.local.json"), "utf8"), cancelBytes);
     assert.equal(existsSync(path.join(data, ".poster-uploads")), false);
 
-    const save = () => fetch(`${origin}/api/draft`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ draft: { text: "owner fixture" } }) });
+    const dashboardRevision = (await (await fetch(`${origin}/api/draft`)).json()).revision;
+    const save = () => fetch(`${origin}/api/draft`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedRevision: dashboardRevision, draft: { text: "owner fixture" } }) });
     assert.equal((await save()).status, 200);
     assert.equal(JSON.parse(readFileSync(path.join(data, ".poster-owner.json"), "utf8")).pid, child.pid);
     const upload = (endpoint) => { const form = new FormData(); form.set("file", new Blob(["fixture"], { type: "image/png" }), "fixture.png"); return fetch(`${endpoint}/api/media`, { method: "POST", body: form }); };
     // A second route bundle in the same backend must share the durable owner.
-    assert.equal((await upload(origin)).status, 200);
+    const firstUpload = await upload(origin); assert.equal(firstUpload.status, 200);
+    await firstUpload.json();
+    const fixtureBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=", "base64");
+    const binaryUpload = (size = fixtureBytes.length) => fetch(`${origin}/api/mcp/v1/media`, { method: "POST",
+      headers: { ...headers, "content-type": "application/octet-stream", "x-crossposter-filename": "runtime.png", "x-crossposter-media-size": String(size) }, body: fixtureBytes });
+    const streamedResponse = await binaryUpload(); assert.equal(streamedResponse.status, 200);
+    const streamed = await streamedResponse.json(); const oldMedia = streamed.data;
+    assert.equal(oldMedia.contentType, "image/png"); assert.equal(oldMedia.kind, "image"); assert.equal(oldMedia.size, fixtureBytes.length);
+    assert.equal(oldMedia.digest, `sha256:${createHash("sha256").update(fixtureBytes).digest("hex")}`);
+    assert.equal(oldMedia.path, undefined); assert.equal(JSON.stringify(streamed).includes(data), false);
+    assert.deepEqual(readFileSync(path.join(data,".poster-uploads",oldMedia.id)), fixtureBytes);
+    const mediaDetail = () => fetch(`${origin}/api/mcp/v1/media/${oldMedia.id}`,{headers});
+    assert.deepEqual(await (await mediaDetail()).json(), streamed);
+    const uploadFiles = readdirSync(path.join(data,".poster-uploads")).sort();
+    assert.equal((await binaryUpload(512*1024*1024+1)).status,400); assert.deepEqual(readdirSync(path.join(data,".poster-uploads")).sort(),uploadFiles);
+    const streamedPreparation = await prepare({ ...input, requestKey:"runtime-streamed-media", content:{...input.content,mediaId:oldMedia.id} });
+    assert.equal(streamedPreparation.status,200);assert.equal((await streamedPreparation.json()).data.payload.media.digest,oldMedia.digest);
+    const configFile = path.join(data, "poster.config.local.json");
+    const withProfile = JSON.parse(readFileSync(configFile, "utf8"));
+    withProfile.profiles = { bluesky: [{ id: "retired", label: "Retired", values: { BLUESKY_IDENTIFIER: "retired.example", BLUESKY_APP_PASSWORD: "retired-fixture-secret" } }] };
+    writeFileSync(configFile, JSON.stringify(withProfile));
+    const draftRequest = (method, body) => fetch(`${origin}/api/mcp/v1/draft`, { method,
+      headers: { ...headers, "content-type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const emptyDraft = (await (await draftRequest("GET")).json()).data;
+    const oldContent = { title: "", text: "Retained runtime draft", linkUrl: "", mediaId: oldMedia.id };
+    const oldDraftResponse = await draftRequest("PUT", { expectedRevision: emptyDraft.revision, content: oldContent, targetIds: ["bluesky:retired"] });
+    assert.equal(oldDraftResponse.status, 200); const oldDraft = (await oldDraftResponse.json()).data;
+    const retainedConfig = JSON.parse(readFileSync(configFile, "utf8")); const retainedDraft = retainedConfig.draft;
+    retainedConfig.profiles = {}; writeFileSync(configFile, JSON.stringify(retainedConfig));
+    unlinkSync(path.join(data, ".poster-uploads", oldMedia.id)); unlinkSync(path.join(data, ".poster-uploads", `${oldMedia.id}.json`));
+    const beforeRecoveryRead = readFileSync(configFile, "utf8");
+    const recoveryResponse = await draftRequest("GET"); assert.equal(recoveryResponse.status, 200);
+    const recovery = (await recoveryResponse.json()).data;
+    assert.deepEqual(recovery.content, oldContent); assert.deepEqual(recovery.targetIds, ["bluesky:retired"]);
+    assert.notEqual(recovery.revision, oldDraft.revision); assert.equal(JSON.stringify(recovery).includes(data), false);
+    assert.equal(readFileSync(configFile, "utf8"), beforeRecoveryRead);
+    assert.equal((await draftRequest("DELETE", { expectedRevision: oldDraft.revision })).status, 409);
+    assert.equal((await draftRequest("DELETE", { expectedRevision: recovery.revision })).status, 200);
+    const cleared = (await (await draftRequest("GET")).json()).data;
+    assert.equal(cleared.content.mediaId, null); assert.deepEqual(cleared.targetIds, []);
+
+    const restoreOrphan = JSON.parse(readFileSync(configFile, "utf8")); restoreOrphan.draft = retainedDraft; writeFileSync(configFile, JSON.stringify(restoreOrphan));
+    const nextUpload = await upload(origin); assert.equal(nextUpload.status, 200); const nextMedia = (await nextUpload.json()).media;
+    const orphan = (await (await draftRequest("GET")).json()).data;
+    const replaced = await draftRequest("PUT", { expectedRevision: orphan.revision,
+      content: { ...oldContent, text: "Recovered runtime draft", mediaId: nextMedia.id }, targetIds: ["bluesky:base"] });
+    assert.equal(replaced.status, 200); assert.equal((await replaced.json()).data.content.mediaId, nextMedia.id);
     const savedConfig = readFileSync(path.join(data, "poster.config.local.json"), "utf8");
     const savedMedia = readdirSync(path.join(data, ".poster-uploads")).sort();
 

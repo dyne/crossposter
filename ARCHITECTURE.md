@@ -32,6 +32,66 @@ and [scheduling](lib/scheduling/README.md) notes for exact failure ordering and
 compatibility limits. Browser clients own HTTP transport; route adapters retain
 request/status behavior and invoke the server facades.
 
+## Shared draft edits
+
+`lib/control/draft-service.ts` implements revision-aware save/clear for the one
+composer draft. It resolves target IDs and stored media metadata on the server,
+then rechecks ownership, configuration, draft and media after asynchronous IO.
+`lib/storage/draft-service.ts` owns the synchronous final replacement shared by
+the dashboard and control routes. The backend assigns monotonically advancing
+update times, including when two writes occur within one millisecond.
+
+The dashboard adds `revision` to its existing draft/history response and sends
+`expectedRevision` when saving (`If-Match` when clearing through DELETE).
+Its storage token and the control projection token are opaque, adapter-specific
+values; use the revision returned by that adapter. Control additionally binds
+actual attached bytes. A control-enabled backend refuses unversioned dashboard
+draft changes. Without control setup, old unversioned callers retain legacy
+compatibility. The browser serializes saves and stops after a failure/conflict;
+it retains editor text locally and asks the owner to reload. Reload respects a
+newer server save/clear and restores IndexedDB-only media only for the matching
+server revision (or the existing initial/legacy migration).
+
+An incumbent draft can retain a deleted profile or media file. Control draft
+reads preserve its safe references and return a recovery revision binding the
+observed missing-resource state, so it can be cleared or replaced. Restoring or
+changing those resources invalidates that token. Missing bytes are never treated
+as byte-verified; new attachments/targets and publication preparation still use
+strict validation. Corrupt/unreadable configuration, metadata, or lost ownership
+remain errors. Reads and mutations recheck their snapshot after media IO.
+
+## Control media transfer
+
+`POST /api/mcp/v1/media` accepts a raw binary stream after the existing machine
+authentication. The bridge supplies a percent-encoded basename in
+`X-Crossposter-Filename`, exact positive byte count in `X-Crossposter-Media-Size`,
+and MIME in `Content-Type`. If supplied, HTTP Content-Length must agree. No
+filesystem path is accepted as a stored-media location. The public MCP tool's
+`localPath` remains a bridge input; it is never forwarded as backend authority.
+
+`media-service.ts` reuses the incumbent filename, extension and MIME inference
+rules, streams with a byte/time ceiling, hashes actual chunks and inspects at
+most the first MiB for best-effort image dimensions. Unsupported generic files
+are rejected. Provider-specific MIME, dimensions and limits remain preparation
+rules. The legacy multipart dashboard upload keeps its existing behavior.
+
+The media adapter stages bytes/metadata privately and links each final name
+exclusively, preserving any preexisting ID. Returned metadata comes from the
+strict stored-byte lookup, includes a SHA256 digest and omits paths. Ordinary
+interruption/read/write failure removes owned staging/partial files. Ownership
+loss or abrupt process death may retain private unreferenced staging; cleanup
+never bypasses ownership or deletes another upload. No media ID is returned
+until complete storage and readback verification. This is not a transaction
+with a provider or a new crash-durability guarantee for media storage.
+
+`CROSSPOSTER_MCP_UPLOAD_MAX_BYTES` defaults to 512 MiB and cannot exceed the
+incumbent 256 GiB store ceiling; `CROSSPOSTER_MCP_UPLOAD_TIMEOUT_MS` defaults to
+900000 and may only lower that deadline. `CROSSPOSTER_MCP_MEDIA_ROOTS` is a JSON
+array of up to sixteen explicit absolute roots, default `[]`. The pure
+`media-settings.ts` parser is available for the later bridge; realpath/symlink
+authorization remains at that bridge boundary. Backend uploads never open these
+caller-local paths and perform no remote downloads or provider requests.
+
 ## Adding a provider or configuration field
 
 1. Add a stable ID/label to `lib/platform-catalog.ts`. Extend descriptive
