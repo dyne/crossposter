@@ -211,7 +211,46 @@ The synchronous journal CAS retains a private immutable `ownerDecision` binding
 the action ID, digest, preparation revision, expiry, choice and decision time.
 Approved/rejected states require this record, which survives restart and stays
 out of public action DTOs. Approval never calls a provider, scheduler or enqueue.
-The future commit operation must independently verify that retained authorization.
+Commit independently verifies that retained authorization.
+
+`execution-service.ts` now supplies that claim boundary and a backend-owned task
+registry. It checks the retained independent decision, digest, deadline and
+dependency snapshot, rechecks synchronously after the final await, then saves
+`executing` before scheduling work. Concurrent commits replay the same claim;
+provider work does not inherit the HTTP request or its cancellation signal.
+Shutdown blocks new claims/further dispatch and tracks already running work.
+Interrupted claims are conservatively terminalized without automatic replay;
+dispatching intent becomes uncertain, while never-dispatched targets stay distinct.
+The commit adapter accepts only the path action ID and body `expectedDigest`.
+The production runner uses the incumbent publishing service with sequential
+per-target hooks. Each hook revalidates identity/media/ownership, flushes intent,
+then invokes the existing provider with an exact scoped base/profile config.
+Base never follows the active profile; scoped missing values cannot fall back.
+Results and safe URLs are flushed before the next target. Raw provider details
+never enter the action journal or its compatible history. Scheduling modes remain
+gated until their separate implementation.
+An approved dispatch that throws without a definitive returned result is uncertain,
+including untagged transport/response-body errors and non-Error rejections: remote
+acceptance may already have happened. Explicit unsuccessful results stay failed.
+The publishing lifecycle supplies this classification without changing providers
+or the legacy dashboard's exception semantics.
+Preparation, approval and claim validate every target binding. During execution,
+account/session checks follow retained outcomes and cover pending/current targets.
+A completed browser provider's own session refresh does not invalidate an untouched
+target; its original binding and result remain immutable. Pending/current account,
+session, media, draft and ownership changes still stop further dispatch.
+
+The stable `action-<id>` post ID is assigned with the claim. Control post reads
+link to authoritative journal outcomes even if legacy history writing fails.
+Known successes survive a later failure; retained dispatching intent becomes
+uncertain, and never-dispatched targets remain distinct. Restart GETs project
+interrupted work conservatively without modifying files. The next authenticated
+commit persists recovery and returns that same action; it never resumes targets.
+SIGTERM/SIGINT stop further claims/dispatch and track in-flight work during the
+backend's grace period. Forced exit leaves durable intent for reconciliation.
+Rotating machine material under a cached execution context fails closed without
+creating a second worker. Restart the backend after offline rotation; existing
+preparations bound to the old material need a new preview and approval.
 
 `app/approvals/[id]` renders a focused owner review through browser-only adapters.
 Its client keeps the session's CSRF value in memory, clears submitted passwords,
@@ -227,8 +266,8 @@ profile, error category and whether external completion was known; redact
 credentials/media paths in shared reports. A provider `Error` with
 `uncertain: true` remains uncertain in live results. Do not blindly retry:
 check the account first. History-write failure can occur after a provider has
-posted, and persistence currently drops the uncertainty boolean while retaining
-warning text. [Runner](tests/app/publish-runner.test.ts) and
+posted. Normalization preserves explicit uncertainty in history and queue results;
+the control journal additionally retains dispatch evidence. [Runner](tests/app/publish-runner.test.ts) and
 [route](tests/app/publish-route.test.ts) tests distinguish those boundaries.
 
 The scheduler has one in-process running guard, a 30-second timer and sequential

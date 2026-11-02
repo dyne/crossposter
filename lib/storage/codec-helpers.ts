@@ -71,6 +71,7 @@ export function normalizePublishResult(value: unknown): PublishResult | null {
     ...(typeof record.profileId === "string" && record.profileId ? { profileId: record.profileId.slice(0, 120) } : {}),
     ...(typeof record.profileLabel === "string" && record.profileLabel ? { profileLabel: record.profileLabel.slice(0, 180) } : {}),
     ok: record.ok === true,
+    ...(record.uncertain === true ? { uncertain: true } : {}),
     message: stringValue(record.message, 1000),
     ...(typeof record.url === "string" && record.url ? { url: record.url.slice(0, 2048) } : {})
   };

@@ -8,7 +8,8 @@ import type {
   PublishedMedia,
   PublishedPost,
   PublishPayload,
-  PublishResult
+  PublishResult,
+  PublishTarget
 } from "@/lib/types";
 
 export type PublishRunInput = PublishPayload & {
@@ -31,6 +32,15 @@ export type PublishDependencies = {
   now: () => Date;
   createId: () => string;
   assertCanPublish?: () => void;
+  targetLifecycle?: {
+    // The awaited preparation returns the final synchronous boundary. It runs
+    // immediately before the provider, with no Promise gap after durable intent.
+    beforeDispatch: (target: PublishTarget) => Promise<() => void>;
+    afterResult: (target: PublishTarget, result: PublishResult) => void;
+    // Control cannot infer remote rejection from a thrown transport/body error.
+    // Legacy callers keep their established explicit uncertain-error mapping.
+    classifyException?: (error: unknown) => "uncertain" | "failed";
+  };
 };
 
 function publishedMediaFromContext(media: ProviderContext["media"]): PublishedMedia | undefined {
@@ -80,8 +90,7 @@ export function createPublishService(dependencies: PublishDependencies) {
       now
     };
 
-    const results = await Promise.all(
-      targets.map(async (target): Promise<PublishResult> => {
+    const publishTarget = async (target: PublishTarget): Promise<PublishResult> => {
         const targetCtx: ProviderContext = {
           ...ctx,
           platforms: [target.platform],
@@ -101,11 +110,15 @@ export function createPublishService(dependencies: PublishDependencies) {
           };
         }
 
+        let beforeDispatch: (() => void) | undefined;
+        if (dependencies.targetLifecycle) beforeDispatch = await dependencies.targetLifecycle.beforeDispatch(target);
         dependencies.assertCanPublish?.();
+        beforeDispatch?.();
+        let outcome: PublishResult;
         try {
           const result = await dependencies.providers[target.platform](targetCtx);
 
-          return {
+          outcome = {
             ...result,
             platform: target.platform,
             targetId: result.targetId || target.id,
@@ -113,12 +126,13 @@ export function createPublishService(dependencies: PublishDependencies) {
             profileLabel: result.profileLabel || target.profileLabel
           };
         } catch (error) {
-          const uncertain =
+          const uncertain = (
             error instanceof Error &&
             "uncertain" in error &&
-            (error as Error & { uncertain?: boolean }).uncertain === true;
+            (error as Error & { uncertain?: boolean }).uncertain === true
+          ) || dependencies.targetLifecycle?.classifyException?.(error) === "uncertain";
 
-          return {
+          outcome = {
             platform: target.platform,
             targetId: target.id,
             profileId: target.profileId,
@@ -128,8 +142,15 @@ export function createPublishService(dependencies: PublishDependencies) {
             message: error instanceof Error ? error.message : "Unknown error"
           };
         }
-      })
-    );
+        // Persistence failures propagate outside the provider exception codec.
+        // The caller retains intent and stops further dispatch on that boundary.
+        dependencies.targetLifecycle?.afterResult(target, outcome);
+        return outcome;
+      };
+    const results: PublishResult[] = [];
+    if (dependencies.targetLifecycle) {
+      for (const target of targets) results.push(await publishTarget(target));
+    } else results.push(...await Promise.all(targets.map(publishTarget)));
     const publishedMedia = publishedMediaFromContext(media);
     const publishedPost = dependencies.appendPublishedPost({
       id: dependencies.createId(),

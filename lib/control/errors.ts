@@ -14,9 +14,10 @@ const messages: Record<ControlErrorCode, string> = {
   ownership_conflict: "Another backend owns this data root.", internal_error: "The control operation could not be completed."
 };
 export class ControlError extends Error {
-  constructor(readonly code: ControlErrorCode) { super(messages[code]); }
+  constructor(readonly code: ControlErrorCode, readonly actionId?: string) { super(messages[code]); }
 }
 export function publicError(error: unknown) {
   const code = error instanceof ControlError ? error.code : "internal_error";
-  return { code, message: messages[code], retryable: code === "storage_unavailable" || code === "backend_unavailable" };
+  return { code, message: messages[code], retryable: code === "storage_unavailable" || code === "backend_unavailable",
+    ...(error instanceof ControlError && error.actionId ? { actionId: error.actionId } : {}) };
 }

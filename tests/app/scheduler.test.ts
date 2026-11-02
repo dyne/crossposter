@@ -66,8 +66,8 @@ describe("scheduled tick production facade", () => {
       { id: "failed", status: "failed", attempts: 3, lastError: "No selected channel published successfully." },
       { id: "unknown", status: "failed", attempts: 3, lastError: "Publish outcome is unknown. Check the profile before rescheduling; it may already be live." }
     ]);
-    // The existing storage codec drops uncertainty even though the warning survives.
-    expect(getScheduledPosts()[1].results?.[0].uncertain).toBeUndefined();
+    // Shared normalization now retains the provider's explicit uncertainty.
+    expect(getScheduledPosts()[1].results?.[0].uncertain).toBe(true);
     expect(await runScheduledTick()).toEqual({ processed: 0, skipped: false });
     expect(publish).toHaveBeenCalledTimes(3);
   });

@@ -131,6 +131,18 @@ decision, restarts the backend and verifies sign-in plus durable approval. Use
 the same `PLAYWRIGHT_BROWSERS_PATH` override as the e2e suite when necessary.
 No real owner password, account or provider publication is involved.
 
+`control-execution-process.test.mjs` compiles the actual execution, journal and
+ownership modules into a disposable fake backend. It checks HTTP disconnect,
+long simulated provider work and abrupt process restart before/after dispatching
+intent using actual retained files. This establishes worker-process behavior;
+it does not exercise Next's production provider adapter or any live account.
+`control-publication-runtime.test.mjs` additionally exercises the actual Next
+commit/worker/read adapters and incumbent Dev.to provider with a fixture-only
+preload. Only its exact outbound endpoint is intercepted in memory; all other
+network/process IO remains denied. It covers strict base/profile values, HTTP
+disconnect, post-acceptance response-body ambiguity/history, restart, SIGKILL/SIGTERM uncertainty and
+machine-token rotation. No provider network connection is opened.
+
 `approval-flows.spec.ts` covers keyboard sign-in/decision, errors, reload,
 concurrent clicks, live expiry and blocked framing. `approval-visual.spec.ts`
 captures long complete content, multiple targets and media at both required

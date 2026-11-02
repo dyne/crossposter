@@ -18,10 +18,23 @@ including all-failed attempts, and only public media fields.
 Provider exceptions become failed results. An `Error` carrying `uncertain: true`
 keeps that warning; other thrown values use `Unknown error`. Live results are
 returned separately from the history writer's returned post, which preserves the
-existing storage normalization (including its loss of stored uncertainty).
+existing storage normalization, which now retains explicit uncertainty.
 Media/config lookup errors and history-write errors reject the operation. A
 history-write failure can occur after publishing has completed; this boundary
 adds no transaction, rollback or retry guarantee.
+
+Approved control execution supplies optional `targetLifecycle` hooks. It runs
+targets sequentially, awaits preconditions, then invokes a returned synchronous
+intent/assertion immediately before each provider call. Result persistence runs
+outside provider exception mapping; a hook failure stops remaining dispatch.
+Legacy callers retain concurrent execution and their existing response shape.
+The optional lifecycle exception classifier lets approved control treat every
+provider rejection without a definitive returned result as uncertain, including
+ordinary transport/body errors and non-Error throws after dispatch intent.
+Explicit returned unsuccessful results remain known failures. Legacy callers
+retain their existing explicitly tagged uncertainty mapping.
+`config-context.ts` scopes exact approved target values across provider awaits;
+`lib/env.ts` keeps its legacy lookup outside that scope.
 
 `tests/app/publish-service.test.ts` exercises this use case with injected memory
 edges. `publish-runner.test.ts` and the publish/schedule route tests retain

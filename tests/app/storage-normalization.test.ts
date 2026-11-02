@@ -22,6 +22,12 @@ async function load(value: unknown) {
 }
 
 describe("persisted configuration compatibility", () => {
+  it.each([undefined, false, "true", true])("retains only explicit boolean uncertainty: %j", async (uncertain) => {
+    const { normalizePublishResult } = await import("@/lib/storage/codec-helpers");
+    const normalized = normalizePublishResult({ ...result, uncertain });
+    if (uncertain === true) expect(normalized).toHaveProperty("uncertain", true);
+    else expect(normalized).not.toHaveProperty("uncertain");
+  });
   it.each([null, false, 17, "bad", [], {}, { values: [] }, { profiles: false }])("defaults malformed or absent sections: %j", async (value) => {
     expect(await load(value)).toEqual({
       values: {}, profiles: {}, activeProfiles: {},
@@ -70,14 +76,14 @@ describe("persisted configuration compatibility", () => {
     expect(saved.publishedPosts[0]).toMatchObject({ platforms: ["x", "x"], targets: [] });
   });
 
-  it("filters invalid history, defaults IDs/times, and retains existing result coercion and uncertain loss", async () => {
+  it("filters invalid history, defaults IDs/times, retains result coercion and preserves explicit uncertainty", async () => {
     const saved = await load({ publishedPosts: [null, [], {}, { results: [{ platform: "unknown" }] }, {
       id: " ", title: " ", text: " text ", url: " legacy ", platforms: ["bluesky", "unknown"], media,
       results: [null, [], { platform: "unknown" }, { ...result, ok: 1, uncertain: true, message: 4, targetId: " ", profileId: " p ", profileLabel: " label ", url: " u " }]
     }, { results: [result] }] });
     expect(saved.publishedPosts).toEqual([
       { id: " ", createdAt: now, title: " ", text: " text ", linkUrl: " legacy ", platforms: ["bluesky"], targets: [], media,
-        results: [{ platform: "bluesky", ok: false, message: "", targetId: " ", profileId: " p ", profileLabel: " label ", url: " u " }] },
+        results: [{ platform: "bluesky", ok: false, uncertain: true, message: "", targetId: " ", profileId: " p ", profileLabel: " label ", url: " u " }] },
       { id: expect.stringMatching(/^[0-9a-f-]{36}$/), createdAt: now, text: "", platforms: [], targets: [], results: [result] }
     ]);
   });
@@ -126,7 +132,7 @@ describe("persisted configuration compatibility", () => {
     expect(saved.scheduledPosts).toEqual([{
       ...schedule, scheduledFor: "2026-01-16T12:00:00.000Z", platforms: ["bluesky", "bluesky"],
       targets: [{ id: "bluesky:base", platform: "bluesky" }, { id: "bluesky:p", platform: "bluesky", profileId: "p" }],
-      media, results: [result], status: "scheduled", attempts: 0, lastError: " error ", publishedPostId: "history", publishedAt: "not-validated"
+      media, results: [{ ...result, uncertain: true }], status: "scheduled", attempts: 0, lastError: " error ", publishedPostId: "history", publishedAt: "not-validated"
     }]);
   });
 
