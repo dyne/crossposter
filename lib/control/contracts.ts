@@ -230,3 +230,4 @@ export type ControlMedia = z.infer<typeof mediaSchema>;
 export type ControlOutcome = z.infer<typeof targetOutcomeSchema>;
 export type ControlPost = z.infer<typeof postSchema>;
 export type ControlScheduledPost = z.infer<typeof scheduledPostSchema>;
+export type ControlAction = z.infer<typeof actionSchema>;

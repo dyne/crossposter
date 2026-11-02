@@ -9,6 +9,7 @@ import { readControlDraftSnapshot, type DraftReadDependencies } from "./draft-sn
 
 type ReadDependencies = DraftReadDependencies & {
   instanceId: string; backendVersion: string; schedulerEnabled: boolean;
+  approvalConfigured?: () => boolean;
 };
 export type ReadToolName = "get_status" | "list_targets" | "get_draft" | "get_media" | "list_posts" | "get_post" | "list_scheduled_posts";
 type PageInput = { limit: number; cursor?: string };
@@ -43,7 +44,7 @@ export function createControlReadService(deps: ReadDependencies) {
       switch (name) {
         case "get_status": return { apiVersion: CONTROL_API_VERSION, backendVersion: deps.backendVersion,
           instanceId: deps.instanceId, scheduler: deps.schedulerEnabled ? "enabled" : "disabled",
-          approvalConfigured: !isPlaceholderValue(dto.baseValue("POSTER_ADMIN_PASSWORD")), readinessBasis: "configuration_only" };
+          approvalConfigured: deps.approvalConfigured?.() ?? !isPlaceholderValue(dto.baseValue("POSTER_ADMIN_PASSWORD")), readinessBasis: "configuration_only" };
         case "list_targets": return paginate("targets", dto.targets, input as PageInput);
         case "get_media": {
           const media = await deps.readMedia(input.mediaId as string);

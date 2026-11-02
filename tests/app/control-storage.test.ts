@@ -69,10 +69,30 @@ describe("durable backend ownership", () => {
 });
 
 describe("versioned action journal", () => {
+  it("requires a bound owner decision for approval and preserves it through later lifecycle changes", () => {
+    const root = createDataRoot(); const owner = acquireBackendOwner(root); const store = createActionStore(root, owner);
+    const prepared = store.save(record("owner-decision"), null);
+    const approved: ActionRecord = { ...prepared, action: { ...prepared.action, state: "approved" } };
+    approved.action.revision = actionRevision(approved.action);
+    expect(() => store.save(approved, prepared.action.revision)).toThrow(expect.objectContaining({ code: "storage_corrupt" }));
+    approved.ownerDecision = { actionId: prepared.action.id, payloadDigest: prepared.action.payloadDigest, preparationRevision: hash("forged-revision"),
+      expiresAt: prepared.action.expiresAt, decision: "approve", decidedAt: prepared.action.createdAt };
+    expect(() => store.save(approved, prepared.action.revision)).toThrow(expect.objectContaining({ code: "action_conflict" }));
+    approved.ownerDecision.preparationRevision = prepared.action.revision;
+    const saved = store.save(approved, prepared.action.revision);
+    const before = fs.readFileSync(path.join(root, actionJournalFilename), "utf8");
+    const changed: ActionRecord = { ...saved, action: { ...saved.action, state: "executing" }, ownerDecision: { ...saved.ownerDecision!, decidedAt: "2026-11-02T10:01:00.000Z" } };
+    changed.action.revision = actionRevision(changed.action);
+    expect(() => store.save(changed, saved.action.revision)).toThrow(expect.objectContaining({ code: "action_conflict" }));
+    expect(fs.readFileSync(path.join(root, actionJournalFilename), "utf8")).toBe(before);
+    owner.release();
+  });
   it("retains final outcomes and post links across owner restart", () => {
     const root = createDataRoot(); const owner = acquireBackendOwner(root); const store = createActionStore(root, owner);
     const prepared = store.save(record(), null);
-    const approved: ActionRecord = { ...prepared, action: { ...prepared.action, state: "approved" } }; approved.action.revision = actionRevision(approved.action);
+    const approved: ActionRecord = { ...prepared, ownerDecision: { actionId: prepared.action.id, payloadDigest: prepared.action.payloadDigest,
+      preparationRevision: prepared.action.revision, expiresAt: prepared.action.expiresAt, decision: "approve", decidedAt: prepared.action.createdAt },
+    action: { ...prepared.action, state: "approved" } }; approved.action.revision = actionRevision(approved.action);
     store.save(approved, prepared.action.revision);
     const executing: ActionRecord = { ...approved, action: { ...approved.action, state: "executing" } }; executing.action.revision = actionRevision(executing.action);
     store.save(executing, approved.action.revision);
@@ -132,6 +152,8 @@ describe("versioned action journal", () => {
       let current = store.save(initial, null);
       const transition = (state: ActionRecord["action"]["state"], changes: Partial<ActionRecord["action"]> = {}) => {
         const next = { ...current, action: { ...current.action, ...changes, state } };
+        if (state === "approved") next.ownerDecision = { actionId: current.action.id, payloadDigest: current.action.payloadDigest,
+          preparationRevision: current.action.revision, expiresAt: current.action.expiresAt, decision: "approve", decidedAt: current.action.createdAt };
         next.action.revision = actionRevision(next.action);
         current = store.save(next, current.action.revision); return current;
       };

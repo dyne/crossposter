@@ -125,6 +125,40 @@ can hand to an agent so it can post through your running server on
 
 ## Run Locally
 
+### Independent local approval for prepared actions
+
+The local control API's machine token cannot approve an action. Configure the
+existing `POSTER_ADMIN_PASSWORD` locally, outside your MCP client, then enter it
+directly in the approval page. Use a separate password; the machine token is
+refused as an owner credential. An absent or placeholder password returns
+`approval_setup_required`.
+
+For a source checkout, start the built backend from a local Bash terminal:
+
+```bash
+read -r -s -p 'Local owner approval password: ' POSTER_ADMIN_PASSWORD
+printf '\n'
+export POSTER_ADMIN_PASSWORD
+CROSSPOSTER_DATA_DIR=/absolute/existing/data npm start -- --hostname 127.0.0.1 --port 2004
+```
+
+Use the data root and exact loopback origin from your existing control setup.
+Build first. A password already saved in `poster.config.local.json` takes
+precedence over the environment; update it locally if needed. Never put this
+password in a tool call, bridge configuration, approval URL or chat. The
+`POSTER_REQUIRE_ADMIN_PASSWORD` dashboard toggle does not disable this approval
+requirement. Local control and owner approval do not support remote/proxy hosting.
+
+Browser sessions use private HttpOnly, SameSite=Strict cookies and expire after
+15 minutes. Five incorrect password attempts in a 15-minute window block further
+authentication until that window ends. Restarting the backend signs the browser
+out; changing/removing the owner password invalidates its sessions. Decisions
+remain in the private action journal across restarts. Opening or refreshing an
+approval link never approves.
+An approval permits a later MCP commit of the exact prepared action, and does
+not publish, enqueue or prove publication. Changed or expired preparations need
+a new preparation and decision.
+
 ### Install
 
 ```bash

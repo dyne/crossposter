@@ -14,6 +14,7 @@ npm run typecheck
 npm run lint
 npm run build
 npx playwright install chromium
+npm run test:control-runtime
 npm run test:e2e
 ```
 
@@ -122,3 +123,19 @@ The screenshots are review artifacts; compare them with the retained baseline
 for the same source/matrix. Capturing alone does not assert visual equivalence.
 Set `COMPOSER_VISUAL_THEME=light` or `dark` and a distinct phase directory to
 capture the same composer/media/results matrix in either existing theme.
+
+The control-runtime gate also launches the existing Chromium against a disposable
+production backend. It enters a synthetic owner password through the actual
+approval page, checks machine-token refusal and protected cookies, records a
+decision, restarts the backend and verifies sign-in plus durable approval. Use
+the same `PLAYWRIGHT_BROWSERS_PATH` override as the e2e suite when necessary.
+No real owner password, account or provider publication is involved.
+
+`approval-flows.spec.ts` covers keyboard sign-in/decision, errors, reload,
+concurrent clicks, live expiry and blocked framing. `approval-visual.spec.ts`
+captures long complete content, multiple targets and media at both required
+viewports/text sizes in light and dark. Additional captures substantiate the
+prepared/approved/rejected/expired/conflicting/executing/completed and auth/error
+states. Set `APPROVAL_VISUAL_PHASE` to a distinct evidence name; output goes to
+`output/playwright/approvals-<phase>/`. Inspect these in one batch and retain the
+original captures when a single correction/confirmation pass is needed.

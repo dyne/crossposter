@@ -2,7 +2,7 @@ import "server-only";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod-control";
-import { actionSchema, digestSchema } from "./contracts";
+import { actionSchema, digestSchema, idSchema, timestampSchema } from "./contracts";
 import { payloadDigest } from "./canonical";
 import { ControlError } from "./errors";
 import type { BackendOwner } from "./backend-ownership";
@@ -13,6 +13,9 @@ const recordSchema = z.strictObject({
   requestKey: z.string().min(1).max(120).regex(/^[A-Za-z0-9._:-]+$/),
   inputDigest: digestSchema,
   action: actionSchema,
+  ownerDecision: z.strictObject({ actionId: idSchema, payloadDigest: digestSchema,
+    preparationRevision: digestSchema, expiresAt: timestampSchema,
+    decision: z.enum(["approve", "reject"]), decidedAt: timestampSchema }).optional(),
   // Backend-private publication configuration/session bindings, or the retained
   // queue snapshot for cancellation. Never returned by routes.
   accountBindings: z.record(z.string(), digestSchema)
@@ -44,7 +47,7 @@ function parseJournal(value: unknown) {
   const records = parsed.data.records;
   if (new Set(records.map((record) => record.requestKey)).size !== records.length
     || new Set(records.map((record) => record.action.id)).size !== records.length) throw new ControlError("storage_corrupt");
-  for (const { action, accountBindings } of records) {
+  for (const { action, accountBindings, ownerDecision } of records) {
     if (payloadDigest(action.payload) !== action.payloadDigest || actionRevision(action) !== action.revision
       || action.approvalUrl !== `/approvals/${action.id}`
       || action.outcomes.length !== action.payload.targets.length
@@ -53,6 +56,12 @@ function parseJournal(value: unknown) {
       || action.payload.targets.some((target, index) => payloadDigest(action.outcomes[index].target)
         !== payloadDigest({ id: target.id, platform: target.platform, profileId: target.profileId, label: target.label })
         || !Object.hasOwn(accountBindings, target.id))) throw new ControlError("storage_corrupt");
+    if (ownerDecision && (ownerDecision.actionId !== action.id || ownerDecision.payloadDigest !== action.payloadDigest
+      || ownerDecision.expiresAt !== action.expiresAt || Date.parse(ownerDecision.decidedAt) < Date.parse(action.createdAt)
+      || Date.parse(ownerDecision.decidedAt) >= Date.parse(action.expiresAt) || action.state === "prepared"
+      || (ownerDecision.decision === "reject" && action.state !== "rejected")
+      || (ownerDecision.decision === "approve" && action.state === "rejected"))) throw new ControlError("storage_corrupt");
+    if (!["prepared", "expired", "conflicting"].includes(action.state) && !ownerDecision) throw new ControlError("storage_corrupt");
   }
   return parsed.data;
 }
@@ -112,6 +121,10 @@ export function createActionStore(root: string, owner: BackendOwner, io?: Durabl
         if (existing.requestKey !== record.requestKey || existing.inputDigest !== record.inputDigest) throw new ControlError("idempotency_conflict");
         if (expectedRevision === null) return existing;
         if (existing.action.revision !== expectedRevision) throw new ControlError("revision_conflict");
+        if (existing.ownerDecision ? payloadDigest(existing.ownerDecision) !== payloadDigest(record.ownerDecision ?? null)
+          : record.ownerDecision && (existing.action.state !== "prepared"
+            || record.ownerDecision.preparationRevision !== existing.action.revision
+            || record.action.state !== (record.ownerDecision.decision === "approve" ? "approved" : "rejected"))) throw new ControlError("action_conflict");
         if (existing.action.id !== record.action.id || !transitions[existing.action.state]?.includes(record.action.state)
           || payloadDigest(existing.action.payload) !== payloadDigest(record.action.payload)
           || payloadDigest(existing.accountBindings) !== payloadDigest(record.accountBindings)

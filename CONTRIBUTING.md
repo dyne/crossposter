@@ -74,6 +74,7 @@ npm --prefix web run test:worker
 npm run typecheck
 npm run lint
 npm run build
+npm run test:control-runtime
 npm run test:e2e
 ```
 
