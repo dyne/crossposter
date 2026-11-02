@@ -104,13 +104,20 @@ export function projectControlConfig(config: ControlReadConfig, environmentValue
   return { targets, content, retained, baseValue, containsPrivate, publicUrl };
 }
 
-export function projectControlDraft(config: ControlReadConfig, dto: ReturnType<typeof projectControlConfig>, mediaDigest: string | null) {
+export function projectControlDraft(config: ControlReadConfig, dto: ReturnType<typeof projectControlConfig>, mediaDigest: string | null,
+  recovery?: { allowMissingTargets: boolean; missingMediaRevision?: string }) {
   const selected = config.draft.targets?.length ? config.draft.targets.map((target) => `${target.platform}:${target.profileId || "base"}`)
     : (config.draft.platforms ?? []).map((platform) => `${platform}:base`);
-  if (selected.some((id) => !dto.targets.some((target) => target.id === id))) throw new ControlError("target_missing");
+  const missingTargetIds = selected.filter((id) => !dto.targets.some((target) => target.id === id));
+  if (missingTargetIds.length && !recovery?.allowMissingTargets) throw new ControlError("target_missing");
   const draft = { content: dto.content(config.draft), targetIds: [...new Set(selected)],
     updatedAt: config.draft.updatedAt ? new Date(config.draft.updatedAt).toISOString() : null };
-  return { ...draft, revision: payloadDigest({ ...draft, mediaDigest }) };
+  // A recovery token binds unavailable references without claiming that their
+  // bytes or account readiness were verified. Healthy revisions stay identical
+  // to the strict projection used by publication preparation.
+  return { ...draft, revision: payloadDigest({ ...draft, mediaDigest,
+    ...(missingTargetIds.length ? { missingTargetIds } : {}),
+    ...(recovery?.missingMediaRevision ? { missingMediaRevision: recovery.missingMediaRevision } : {}) }) };
 }
 export function projectControlSchedule(post: QueuedPost, dto: ReturnType<typeof projectControlConfig>) {
   const projected = { id: post.id, createdAt: new Date(post.createdAt).toISOString(), updatedAt: new Date(post.updatedAt).toISOString(),

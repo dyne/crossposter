@@ -7,6 +7,7 @@ export type { MediaKind, UploadedMedia } from "@/lib/storage/media-types";
 export { mediaKind, resolveContentType } from "@/lib/storage/media-service";
 
 export const {
+  saveStreamedMedia,
   saveUploadedMedia,
   getUploadedMedia,
   openUploadedMedia,

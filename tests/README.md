@@ -120,3 +120,5 @@ each HTML element's original computed font size; it does not change browser zoom
 viewport or device scale. Date, content, API responses and media are fixtures.
 The screenshots are review artifacts; compare them with the retained baseline
 for the same source/matrix. Capturing alone does not assert visual equivalence.
+Set `COMPOSER_VISUAL_THEME=light` or `dark` and a distinct phase directory to
+capture the same composer/media/results matrix in either existing theme.

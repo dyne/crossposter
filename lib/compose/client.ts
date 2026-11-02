@@ -5,7 +5,7 @@ import type {
 
 export type PublishResponse = { results?: PublishResult[]; publishedPost?: PublishedPost; error?: unknown };
 export type ConfigProfilesResponse = { profiles: Partial<Record<Platform, ProviderProfile[]>> };
-export type DraftResponse = { draft?: ComposeDraft; publishedPosts?: PublishedPost[] };
+export type DraftResponse = { draft?: ComposeDraft; publishedPosts?: PublishedPost[]; revision?: string };
 export type UploadedMedia = {
   id: string;
   filename: string;
@@ -27,11 +27,11 @@ export type PublishInput = {
 export type ScheduleInput = PublishInput & { scheduledFor: string };
 type ApiFieldError = { formErrors?: string[]; fieldErrors?: Record<string, string[]> };
 
-function putDraft(draft: ComposeDraft) {
+function putDraft(draft: ComposeDraft, expectedRevision?: string) {
   return fetch("/api/draft", {
     method: "PUT",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ draft })
+    body: JSON.stringify({ draft, ...(expectedRevision ? { expectedRevision } : {}) })
   });
 }
 
@@ -47,7 +47,7 @@ async function postJson<T>(url: string, input: PublishInput | ScheduleInput, sig
 
 // Browser-only transport seam. Status handling remains operation-specific:
 // legacy draft/config reads parse JSON regardless of HTTP status, and draft
-// writes ignore response bodies. Publishing/scheduling inspect status below.
+// writes return their response so the draft hook can track server revisions.
 export const composeClient = {
   async readConfig(): Promise<ConfigProfilesResponse> {
     return (await fetch("/api/config", { cache: "no-store" })).json();

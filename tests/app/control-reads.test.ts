@@ -133,7 +133,7 @@ describe("safe read projections", () => {
     expect(data.items[0].capabilities).toEqual({ text: true, title: false, singleMedia: true });
     expect((await (await get("draft")).json()).data.targetIds).toEqual(["bluesky:first"]);
     config({ profiles: { bluesky: [profiles.bluesky[1]] }, draft: { targets: [target] } });
-    expect(await (await get("draft")).json()).toMatchObject({ error: { code: "target_missing" } });
+    expect(await (await get("draft")).json()).toMatchObject({ ok: true, data: { targetIds: ["bluesky:first"] } });
   });
   it("retains partial and uncertain outcomes with redacted messages and safe URLs", async () => {
     const first = post("partial"); const second = { id: "second-target", platform: "bluesky", profileId: "second", profileLabel: "Second account" };

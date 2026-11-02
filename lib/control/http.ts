@@ -5,7 +5,7 @@ import { authenticateControl } from "./auth";
 import { controlTools } from "./contracts";
 import { ControlError, publicError } from "./errors";
 import { createControlReadService, type ReadToolName } from "./read-service";
-import { readControlConfig, readControlMedia } from "./read-storage";
+import { controlMediaRevision, readControlConfig, readControlMedia } from "./read-storage";
 
 const statuses: Partial<Record<ReturnType<typeof publicError>["code"], number>> = {
   validation_failed: 400, unauthorized: 401, forbidden: 403, instance_mismatch: 409,
@@ -15,6 +15,22 @@ const statuses: Partial<Record<ReturnType<typeof publicError>["code"], number>> 
   cursor_invalid: 400, cursor_stale: 409, storage_corrupt: 500, storage_unavailable: 503
 };
 const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff" };
+
+export async function readControlJson(request: Request): Promise<unknown> {
+  const reader = request.body?.getReader();
+  if (!reader) throw new ControlError("validation_failed");
+  const chunks: Uint8Array[] = []; let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      bytes += value.byteLength;
+      if (bytes > 1024 * 1024) { await reader.cancel(); throw new ControlError("validation_failed"); }
+      chunks.push(value);
+    }
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)));
+  } catch { throw new ControlError("validation_failed"); }
+  finally { reader.releaseLock(); }
+}
 
 export function controlSuccess(name: keyof typeof controlTools, data: unknown) {
   const output = controlTools[name].outputSchema.safeParse({ ok: true, data });
@@ -46,6 +62,7 @@ export async function controlRead(request: Request, name: ReadToolName, params: 
     const service = createControlReadService({
       readConfig: () => readControlConfig(auth.canonicalRoot),
       readMedia: (id) => readControlMedia(auth.canonicalRoot, id),
+      mediaRevision: (id) => controlMediaRevision(auth.canonicalRoot, id, true),
       instanceId: auth.instanceId, backendVersion: packageInfo.version,
       schedulerEnabled: process.env.POSTER_DISABLE_SCHEDULER !== "true",
       environmentValue: (field) => process.env[field]

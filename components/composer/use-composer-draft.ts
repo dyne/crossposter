@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ComposeDraft, PublishedPost, PublishTarget } from "@/lib/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ComposeDraft, PublishedMedia, PublishedPost, PublishTarget } from "@/lib/types";
 import { composeClient, fileFromDraftMedia } from "@/lib/compose/client";
 import {
   draftTimestamp, newestDraft, normalizeDraft, readStoredDraft,
-  readStoredDraftMedia, writeStoredDraft
+  readStoredDraftMedia, writeStoredDraft, readStoredDraftRevision, writeStoredDraftRevision
 } from "@/lib/compose/draft-storage";
 import { platformIds } from "@/lib/platform-catalog";
 
@@ -30,7 +30,36 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
   const [saveError, setSaveError] = useState("");
   const [storageError, setStorageError] = useState("");
   const [isSavingDraft, setIsSavingDraft] = useState(false);
-  const saveState = useRef({ active: true, revision: 0 });
+  const [attachedMedia, setAttachedMedia] = useState<PublishedMedia>();
+  const saveState = useRef({ active: true, revision: 0, serverRevision: undefined as string | undefined,
+    pending: Promise.resolve(), blocked: "" });
+
+  const persistDraft = useCallback((draft: ComposeDraft) => {
+    const state = saveState.current;
+    const save = state.pending.then(async () => {
+      if (!state.active) return;
+      if (state.blocked) throw new Error(state.blocked);
+      try {
+        const response = await composeClient.saveDraft(draft, state.serverRevision);
+        if (!response.ok) throw new Error(response.status === 409
+          ? "Draft changed elsewhere. Reload before saving; your edits remain in this browser."
+          : "Draft could not be saved. Reload before trying again; your edits remain in this browser.");
+        const body = await response.json() as { revision?: string };
+        if (body.revision) {
+          state.serverRevision = body.revision;
+          try { writeStoredDraftRevision(body.revision); }
+          catch (error) { if (state.active) setStorageError(message(error)); }
+        }
+      } catch (error) {
+        // A failed response may follow a completed server write. Never guess a
+        // new base or replay queued edits over another client's draft.
+        state.blocked = message(error);
+        throw error;
+      }
+    });
+    state.pending = save.catch(() => undefined);
+    return save;
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -48,11 +77,26 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
       try {
         const body = await composeClient.readDraft(controller.signal);
         const browserDraft = readStoredDraft();
-        const draft = newestDraft(body.draft, browserDraft);
-        const serverMediaImport = body.draft?.media && draftTimestamp(body.draft) >= draftTimestamp(browserDraft)
+        // A versioned backend owns the shared singleton. Browser timestamps
+        // cannot silently resurrect edits made before a newer MCP save/clear.
+        // A never-saved backend still accepts the existing browser migration.
+        const serverSaved = Boolean(body.revision && body.draft?.updatedAt);
+        const draft = serverSaved ? normalizeDraft(body.draft) : newestDraft(body.draft, browserDraft);
+        const serverMediaImport = body.draft?.media && (serverSaved || draftTimestamp(body.draft) >= draftTimestamp(browserDraft))
           ? await fileFromDraftMedia(body.draft.media, controller.signal) : null;
-        const storedMedia = serverMediaImport || await readStoredDraftMedia();
+        const previousRevision = readStoredDraftRevision();
+        const legacySameDraft = !previousRevision && draftTimestamp(body.draft) === draftTimestamp(browserDraft)
+          && JSON.stringify(normalizeDraft(body.draft)) === JSON.stringify(normalizeDraft(browserDraft));
+        const recoverBrowserMedia = !serverSaved || previousRevision === body.revision || legacySameDraft;
+        const storedMedia = serverMediaImport || (recoverBrowserMedia ? await readStoredDraftMedia() : null);
         if (!active) return;
+        state.serverRevision = body.revision;
+        state.blocked = "";
+        if (body.revision) {
+          try { writeStoredDraftRevision(body.revision); }
+          catch (error) { setStorageError(message(error)); }
+        }
+        setAttachedMedia(body.draft?.media);
         restore(draft);
         setPublishedPosts(body.publishedPosts || []);
         hydrateMedia(storedMedia);
@@ -97,7 +141,8 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
   useEffect(() => {
     if (!draftHydrated || !configHydrated) return;
     if (!hasSavedDraft && !title && !text && !linkUrl && selected.length === 0) return;
-    const draft: ComposeDraft = { title, text, linkUrl, platforms: selectedPlatforms, targets: selectedTargets, updatedAt: new Date().toISOString() };
+    const draft: ComposeDraft = { title, text, linkUrl, platforms: selectedPlatforms, targets: selectedTargets,
+      ...(attachedMedia ? { media: attachedMedia } : {}), updatedAt: new Date().toISOString() };
     try { writeStoredDraft(draft); setStorageError(""); }
     catch (error) { setStorageError(message(error)); }
     let active = true;
@@ -105,9 +150,9 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
     state.revision++;
     const timer = window.setTimeout(() => {
       setIsSavingDraft(true);
-      // Responses never replace edits. Lifecycle guards apply to diagnostic
-      // state only; this does not promise serialized server writes or retries.
-      void composeClient.saveDraft(draft).then(() => {
+      // Serialize writes and advance only from a successful server revision.
+      // Responses never replace current editor text.
+      void persistDraft(draft).then(() => {
         if (active) setSaveError("");
       }).catch((error: unknown) => {
         if (active) setSaveError(message(error));
@@ -116,18 +161,19 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
       });
     }, 250);
     return () => { active = false; state.revision++; window.clearTimeout(timer); };
-  }, [title, text, linkUrl, selected, selectedPlatforms, selectedTargets, draftHydrated, configHydrated, hasSavedDraft]);
+  }, [title, text, linkUrl, selected, selectedPlatforms, selectedTargets, draftHydrated, configHydrated, hasSavedDraft, attachedMedia, persistDraft]);
 
   async function clearDraft() {
     const draft: ComposeDraft = { title: "", text: "", linkUrl: "", platforms: [], targets: [], updatedAt: new Date().toISOString() };
     setHasSavedDraft(true);
     setTitle(""); setText(""); setLinkUrl(""); setSelected([]);
+    setAttachedMedia(undefined);
     try { writeStoredDraft(draft); setStorageError(""); }
     catch (error) { setStorageError(message(error)); }
     await clearMedia();
     const state = saveState.current;
     const revision = state.revision;
-    await composeClient.saveDraft(draft).catch((error: unknown) => {
+    await persistDraft(draft).catch((error: unknown) => {
       if (state.active && state.revision === revision) setSaveError(message(error));
     });
   }
@@ -135,6 +181,7 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
   return {
     title, setTitle, text, setText, linkUrl, setLinkUrl, selected, setSelected,
     publishedPosts, setPublishedPosts, draftHydrated, hasSavedDraft, setHasSavedDraft, clearDraft,
-    isLoadingDraft: !draftHydrated, isSavingDraft, loadError, saveError, storageError
+    isLoadingDraft: !draftHydrated, isSavingDraft, loadError, saveError, storageError,
+    detachMedia: () => setAttachedMedia(undefined)
   };
 }

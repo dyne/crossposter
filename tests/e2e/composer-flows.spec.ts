@@ -1,5 +1,20 @@
 import { test, expect, fixturePng } from "./fixtures";
 
+test("a newer MCP draft conflicts with browser autosave and survives reload", async ({ page, fixtureState }) => {
+  await page.goto("/");
+  await expect(page.getByRole("checkbox")).toBeChecked();
+  await page.getByPlaceholder("Write the post once.").fill("Initial shared draft");
+  await expect.poll(() => fixtureState.draft.text).toBe("Initial shared draft");
+  fixtureState.draft = { ...fixtureState.draft, text: "Newer MCP draft", updatedAt: "2026-11-02T15:00:00Z" };
+  fixtureState.draftRevision++;
+  await page.getByPlaceholder("Write the post once.").fill("Unsaved browser edit");
+  await expect(page.getByText(/Draft changed elsewhere\. Reload before saving/)).toBeVisible();
+  expect(fixtureState.draft.text).toBe("Newer MCP draft");
+  await expect(page.getByPlaceholder("Write the post once.")).toHaveValue("Unsaved browser edit");
+  await page.reload();
+  await expect(page.getByPlaceholder("Write the post once.")).toHaveValue("Newer MCP draft");
+});
+
 test("keyboard compose/target selection/upload/publish restores mixed history and clears it", async ({ page, fixtureState }) => {
   fixtureState.publishResponse = {
     publishedPost: {

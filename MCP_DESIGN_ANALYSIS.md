@@ -467,15 +467,29 @@ redirects. Framework headers do not substitute for the required loopback bind.
 The initial seven reads are status, targets, draft, media detail, retained
 post collection/detail and scheduled collection. They validate every output,
 set `Cache-Control: no-store` and do not import scheduler/provider facades.
-Action lookup adds a pure eighth read. Preparation is the only newly enabled local
-mutation; it does not authorize or execute a publication. Status reports configured
-scheduler enablement, not a timer/login health probe.
+Action lookup adds a pure eighth read. Preparation, revision-aware singleton
+draft save/clear and authenticated binary media upload are enabled local
+mutations. Media transfer uses the
+existing store, with exact size/deadline bounds, private failure-cleaned staging
+and a digest checked against readback. It accepts bytes and a filename, never a
+caller filesystem path. The later bridge enforces the explicitly configured
+local media roots and symlink boundary. None of these local operations authorizes
+or executes a publication. Draft writes resolve stored media IDs and explicit targets on the
+backend, and recheck ownership/configuration/draft/media after IO. The optional
+dashboard shares final draft replacement, adds compatible expected revisions,
+serializes its writes and reports conflicts while keeping edits in the browser.
+Status reports configured scheduler enablement, not a timer/login health probe.
 Targets use each saved profile's own configuration/defaults. A `platform:base`
 target exists only when legacy local/environment provider fields are explicitly
 present and never follows the active profile. Ambiguous duplicate identities
 fail closed. Historical post/schedule identities come from their retained
 snapshots; deleting a live profile does not erase retained history. Drafts must
-still resolve their current targets and stored media.
+retain safe references even after a selected profile or file is removed. A draft
+read then supplies a recovery revision binding the observed missing-resource
+state, enabling clear/replacement with valid new references. It does not claim
+missing bytes were verified. Changed/restored resources or draft/config changes
+during IO conflict; new attachments/targets and publication preparation remain
+strict. Corrupt/unreadable configuration and media metadata remain errors.
 
 DTOs deliberately omit config fields, provider exception text, stored file paths
 and arbitrary metadata. Outcomes have fixed summaries. Result URLs preserve

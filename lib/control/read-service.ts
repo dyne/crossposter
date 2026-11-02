@@ -3,14 +3,12 @@ import { isPlaceholderValue } from "@/lib/config-validation";
 import { CONTROL_API_VERSION, digestSchema } from "./contracts";
 import { payloadDigest } from "./canonical";
 import { ControlError } from "./errors";
-import type { ControlReadConfig, RetainedPost } from "./read-storage";
-import { projectControlConfig, projectControlDraft, projectControlMedia, projectControlSchedule } from "./read-projections";
+import type { RetainedPost } from "./read-storage";
+import { projectControlConfig, projectControlMedia, projectControlSchedule } from "./read-projections";
+import { readControlDraftSnapshot, type DraftReadDependencies } from "./draft-snapshot";
 
-type ReadDependencies = {
-  readConfig: () => ControlReadConfig;
-  readMedia: (id: string) => Promise<{ id: string; filename: string; contentType: string; size: number; kind: string; digest: string; url: string }>;
+type ReadDependencies = DraftReadDependencies & {
   instanceId: string; backendVersion: string; schedulerEnabled: boolean;
-  environmentValue: (name: string) => string | undefined;
 };
 export type ReadToolName = "get_status" | "list_targets" | "get_draft" | "get_media" | "list_posts" | "get_post" | "list_scheduled_posts";
 type PageInput = { limit: number; cursor?: string };
@@ -39,6 +37,7 @@ export function createControlReadService(deps: ReadDependencies) {
   }
   return {
     async read(name: ReadToolName, input: Record<string, unknown>) {
+      if (name === "get_draft") return (await readControlDraftSnapshot(deps)).draft;
       const config = deps.readConfig();
       const dto = projectControlConfig(config, deps.environmentValue);
       switch (name) {
@@ -46,11 +45,6 @@ export function createControlReadService(deps: ReadDependencies) {
           instanceId: deps.instanceId, scheduler: deps.schedulerEnabled ? "enabled" : "disabled",
           approvalConfigured: !isPlaceholderValue(dto.baseValue("POSTER_ADMIN_PASSWORD")), readinessBasis: "configuration_only" };
         case "list_targets": return paginate("targets", dto.targets, input as PageInput);
-        case "get_draft": {
-          projectControlDraft(config, dto, null);
-          const media = config.draft.media ? await deps.readMedia(config.draft.media.id) : null;
-          return projectControlDraft(config, dto, media?.digest ?? null);
-        }
         case "get_media": {
           const media = await deps.readMedia(input.mediaId as string);
           return projectControlMedia(media as Parameters<typeof projectControlMedia>[0], dto);
