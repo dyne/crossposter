@@ -78,6 +78,10 @@ export type MediaPreflightTarget = {
   xPremium?: boolean;
 };
 
+export function requiresLocalMedia(platform: Platform): boolean {
+  return ["instagram", "youtube", "dribbble", "pinterest"].includes(platform);
+}
+
 export function fileExtension(filename: string): string {
   const dotIndex = filename.lastIndexOf(".");
 
@@ -90,7 +94,7 @@ export function mediaKindLabel(kind: UploadedMedia["kind"]): string {
 
 export function mediaPreflightIssues(
   targets: MediaPreflightTarget[],
-  file: File | null,
+  file: Pick<File, "name" | "type" | "size"> | null,
   dimensions?: MediaDimensions | null
 ): PreflightIssue[] {
   const issues: PreflightIssue[] = [];

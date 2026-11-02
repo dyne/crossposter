@@ -104,9 +104,18 @@ describe("persisted configuration compatibility", () => {
     expect((await load({ scheduledPosts: [{ ...schedule, attempts }] })).scheduledPosts[0].attempts).toBe(expected);
   });
 
-  it.each(["hackernews", "dribbble", "pinterest", "bluesky"])("preserves existing title-only schedule acceptance for %s", async (platform) => {
+  it.each(["hackernews", "dribbble", "pinterest", "bluesky"])("preserves valid title-only schedules for %s", async (platform) => {
     const saved = await load({ scheduledPosts: [{ ...schedule, platforms: [platform], title: " title ", text: " " }] });
-    expect(saved.scheduledPosts).toHaveLength(platform === "hackernews" ? 1 : 0);
+    expect(saved.scheduledPosts).toHaveLength(["hackernews", "dribbble", "pinterest"].includes(platform) ? 1 : 0);
+  });
+
+  it("limits the title-only repair to Dribbble/Pinterest and keeps other legacy selections unchanged", async () => {
+    const saved = await load({ scheduledPosts: [
+      { ...schedule, id: "mixed", platforms: ["hackernews", "dribbble", "pinterest"], title: "title", text: "" },
+      { ...schedule, id: "with-text-channel", platforms: ["dribbble", "bluesky"], title: "title", text: "" },
+      { ...schedule, id: "duplicate-hn", platforms: ["hackernews", "hackernews"], title: "title", text: "" }
+    ] });
+    expect(saved.scheduledPosts.map((post) => post.id)).toEqual(["mixed"]);
   });
 
   it("uses valid targets before platform IDs, retains duplicates and drops malformed schedules", async () => {

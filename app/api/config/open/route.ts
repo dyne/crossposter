@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { NextResponse } from "next/server";
 import { localConfigPath, readLocalConfig, writeLocalConfig } from "@/lib/local-config";
+import { assertCurrentBackendMutation } from "@/lib/control/backend-mutation";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,7 @@ export async function POST() {
     writeLocalConfig(readLocalConfig());
   }
 
+  assertCurrentBackendMutation();
   const child = spawn("open", [localConfigPath], {
     detached: true,
     stdio: "ignore"

@@ -40,7 +40,8 @@ export function createLocalConfigStore(
 
     try {
       return normalizeConfig(storage.read(), defaults);
-    } catch {
+    } catch (error) {
+      if (storage.strictRead?.()) throw error;
       return {
         values: {},
         profiles: {},

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import { getUploadedMediaStorageStats } from "@/lib/media-store";
+import { assertCurrentBackendMutation } from "@/lib/control/backend-mutation";
 
 export const runtime = "nodejs";
 
@@ -23,8 +24,10 @@ export async function POST() {
 
   const storage = await getUploadedMediaStorageStats();
 
+  assertCurrentBackendMutation();
   await mkdir(storage.path, { recursive: true });
 
+  assertCurrentBackendMutation();
   const child = spawn("open", [storage.path], {
     detached: true,
     stdio: "ignore"

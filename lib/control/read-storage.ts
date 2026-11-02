@@ -5,9 +5,12 @@ import path from "node:path";
 import { z } from "zod-control";
 import { platformSchema, timestampSchema } from "./contracts";
 import { ControlError } from "./errors";
-import { mediaFilePath } from "@/lib/storage/media-storage";
+import { mediaFilePath } from "@/lib/storage/media-path";
 import { resolveContentType, mediaKind } from "@/lib/storage/media-service";
 import { configFields } from "@/lib/config-spec";
+import { maxJsonStorageBytes } from "@/lib/storage/json-limits";
+import { payloadDigest } from "./canonical";
+import { imageSize } from "image-size";
 
 const storedTarget = z.object({ id: z.string().max(180), platform: platformSchema,
   profileId: z.string().max(120).optional(), profileLabel: z.string().max(180).optional() });
@@ -47,13 +50,17 @@ function isMissing(error: unknown): boolean {
 function parseJson(source: string): unknown {
   try { return JSON.parse(source); } catch { throw new ControlError("storage_corrupt"); }
 }
-export function readControlConfig(root: string): ControlReadConfig {
+export function readControlConfig(root: string, maxBytes = maxJsonStorageBytes): ControlReadConfig {
   let raw: unknown;
   try {
     const filename = path.join(root, "poster.config.local.json");
     const stat = lstatSync(filename);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024 * 1024) throw new ControlError("storage_corrupt");
-    raw = parseJson(readFileSync(filename, "utf8"));
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > maxBytes) throw new ControlError("storage_corrupt");
+    let source: string;
+    try { source = readFileSync(filename, "utf8"); }
+    catch { throw new ControlError("storage_unavailable"); }
+    if (Buffer.byteLength(source, "utf8") > maxBytes) throw new ControlError("storage_corrupt");
+    raw = parseJson(source);
   } catch (error) {
     if (isMissing(error)) raw = {};
     else throw error instanceof ControlError ? error : new ControlError("storage_unavailable");
@@ -76,6 +83,24 @@ const metadataSchema = z.object({ id: z.string(), filename: z.string().min(1).ma
   contentType: z.string().max(160), size: z.number().int().nonnegative(),
   kind: z.enum(["image", "video", "audio", "file"]),
   digest: z.string().optional() });
+
+export function controlMediaRevision(root: string, id: string): string {
+  let filename: string;
+  try { filename = mediaFilePath(path.join(root, ".poster-uploads"), id); }
+  catch { throw new ControlError("media_missing"); }
+  try {
+    const directory = lstatSync(path.dirname(filename));
+    if (!directory.isDirectory() || directory.isSymbolicLink()) throw new ControlError("storage_corrupt");
+    const versions = [filename, `${filename}.json`].map((name) => {
+      const stat = lstatSync(name, { bigint: true });
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new ControlError("storage_corrupt");
+      return [String(stat.dev), String(stat.ino), String(stat.size), String(stat.mtimeNs), String(stat.ctimeNs)];
+    });
+    return payloadDigest(versions);
+  } catch (error) {
+    throw error instanceof ControlError ? error : new ControlError(isMissing(error) ? "media_missing" : "storage_unavailable");
+  }
+}
 export async function readControlMedia(root: string, id: string) {
   let filename: string;
   try { filename = mediaFilePath(path.join(root, ".poster-uploads"), id); }
@@ -92,7 +117,11 @@ export async function readControlMedia(root: string, id: string) {
     if (!parsed.success || parsed.data.id !== id || parsed.data.size !== before.size) throw new ControlError("storage_corrupt");
     const metadata = parsed.data;
     const hash = createHash("sha256");
-    for await (const chunk of createReadStream(filename)) hash.update(chunk);
+    const header: Buffer[] = []; let headerBytes = 0;
+    for await (const chunk of createReadStream(filename)) {
+      hash.update(chunk);
+      if (headerBytes < 1024 * 1024) { const bytes = Buffer.from(chunk).subarray(0, 1024 * 1024 - headerBytes); header.push(bytes); headerBytes += bytes.length; }
+    }
     const after = lstatSync(filename);
     if (after.ino !== before.ino || after.size !== before.size || after.mtimeMs !== before.mtimeMs) throw new ControlError("storage_unavailable");
     const digest = `sha256:${hash.digest("hex")}`;
@@ -100,8 +129,10 @@ export async function readControlMedia(root: string, id: string) {
     const contentType = resolveContentType(metadata.filename, metadata.contentType);
     if (!/^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i.test(contentType)) throw new ControlError("storage_corrupt");
     // Metadata's path/url are intentionally never authoritative or returned.
+    let dimensions: { width: number; height: number } | undefined;
+    if (mediaKind(contentType) === "image") { try { const size = imageSize(Buffer.concat(header)); dimensions = { width: size.width, height: size.height }; } catch { /* preparation rejects unverifiable required dimensions */ } }
     return { id, filename: path.basename(metadata.filename.replaceAll("\\", "/")),
-      contentType, size: before.size, kind: mediaKind(contentType), digest, url: `/api/media/${id}` };
+      contentType, size: before.size, kind: mediaKind(contentType), digest, url: `/api/media/${id}`, dimensions };
   } catch (error) {
     if (error instanceof ControlError) throw error;
     throw new ControlError(isMissing(error) ? "media_missing" : "storage_unavailable");

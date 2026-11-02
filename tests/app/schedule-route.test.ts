@@ -47,8 +47,8 @@ describe("POST /api/scheduled", () => {
 
   it.each([
     { platform: "hackernews", persisted: true },
-    { platform: "dribbble", persisted: false },
-    { platform: "pinterest", persisted: false }
+    { platform: "dribbble", persisted: true },
+    { platform: "pinterest", persisted: true }
   ])("accepts title-only $platform but persisted=$persisted", async ({ platform, persisted }) => {
     const { POST } = await import("@/app/api/scheduled/route");
     const response = await POST(scheduleRequest({ title: "A title", text: "", platforms: [platform] }));

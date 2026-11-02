@@ -1,11 +1,12 @@
 # Existing behavior captured before extraction
 
 These tests describe the production code at the refactor's starting commit.
-They preserve observable disagreements rather than deciding a new contract.
+They preserve observable disagreements except the explicitly scoped title-only
+Dribbble/Pinterest persistence repair described below.
 
 | Behavior | Current observation | Tests |
 | --- | --- | --- |
-| Title-only scheduling | Publish and schedule request validation accept Hacker News, Dribbble and Pinterest with a title and empty text. Stored schedule normalization preserves only Hacker News. Dribbble/Pinterest POST returns 200 and a `scheduledPost`, but `scheduledPosts` and a subsequent store read are empty. | `publish-route.test.ts`, `schedule-route.test.ts` |
+| Title-only scheduling | Requests accept Hacker News, Dribbble and Pinterest with a title and empty text. Preparation work repairs the original loss of valid Dribbble/Pinterest schedules in storage, including mixed title-only selections. Other legacy normalization remains characterized separately. | `publish-route.test.ts`, `schedule-route.test.ts`, `storage-normalization.test.ts`, `control-actions.test.ts` |
 | Uncertain results | A provider exception marked `uncertain: true` remains uncertain in live runner/HTTP `results`. Configuration normalization drops that property from history and scheduled result records; even the returned `publishedPost.results` lacks it. Tests assert the live warning and existing history loss separately. | `publish-route.test.ts`, `publish-runner.test.ts` |
 | Duplicate-platform limits | Validation evaluates the first target of each platform. For two X profiles, premium then free permits 281 characters; reversing the order rejects it using the free profile label. | `schedule-route.test.ts`, `limits.test.ts` |
 | Duplicate schedule platform IDs | The schedule route initially deduplicates platform IDs, but persistence derives them again from targets without deduplication. Two Bluesky targets produce two Bluesky entries in the saved/returned schedule's `platforms`. Immediate history retains one platform entry and both targets. | `schedule-route.test.ts`, `publish-route.test.ts` |

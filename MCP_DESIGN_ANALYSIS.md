@@ -149,6 +149,65 @@ flowchart LR
   the backend. The backend must remain running to publish on time; after host
   downtime, overdue approved schedules follow the documented catch-up policy.
 
+The persistence boundary now lives in `lib/control/backend-ownership.ts`,
+`backend-mutation.ts` and `action-store.ts`. Control-enabled production paths,
+including optional dashboard writes, share a canonical-root owner claim and
+fail before effects on ownership loss or unreadable config/journal state. A live
+or reused PID is never reclaimed; a confirmed absent PID can be recovered under
+a serialized recovery gate. Immutable journal records and terminal replay links
+use private files, file flush, atomic replacement and directory flush. A durable
+initialization marker makes a disappeared journal an explicit error after
+restart. Pure GETs initialize none of this state. Existing behavior is retained
+when no control setup or retained control artifacts exist. This boundary enables
+neither an approval decision nor provider execution; see
+`lib/storage/README.md` for recovery and filesystem limitations.
+
+The reader/writer JSON ceiling is shared and counts the complete serialized
+UTF-8 output before replacement; overflow preserves existing records and cannot
+initialize an oversized first journal. Accepted `scheduled` / `rescheduled`
+records remain eligible for later dispatch/result transitions under the same
+immutable action identity, including after the preparation deadline. Truly final
+outcomes cannot return to execution. These storage semantics grant no approval
+or publishing authority by themselves.
+
+`prepare_action` and `get_action` now use the existing backend through authenticated
+`POST /actions` and pure `GET /actions/:actionId`. Preparation performs no provider,
+timer or enqueue operation. It canonicalizes accepted input through the incumbent
+URL/publishing normalization, validates each explicit publication profile separately and saves
+the full immutable preview with a thirty-minute deadline. The stable request key
+replays that retained record across backend restart, including expired/conflicting
+records; a changed canonical request conflicts. Reads derive expiry and changed
+preconditions without repairing or updating storage. No owner-decision or commit
+route is enabled by this milestone.
+
+Publication/rescheduling account binding is deliberately conservative: public identity revisions describe
+the public target/action snapshot and never hash credentials. A backend-private
+HMAC binds effective explicit-profile or explicit-base settings, configured local
+session state and relevant cookie/login/storage bytes. Automatic YouTube Chrome
+sources and its incumbent stored-cookie fallback are bound without extracting
+credentials or checking a provider login. A legacy base target never follows an
+active profile. Changed session/configuration, actual stored media bytes, or a
+relevant draft/schedule revision invalidates preparation. The backend rechecks
+these conditions and the clock after media IO before saving. Future execution
+must use the same explicit resolver and private binding, not the legacy active
+profile fallback for an undefined profile ID.
+
+Scheduled inputs require an explicit offset and a future instant, normalize to
+UTC, and display the frozen IANA timezone selected by `CROSSPOSTER_TIMEZONE`
+(default `Europe/Berlin`). Cancellation previews retain the existing queue time;
+cancellation can still prevent overdue pending work. Cancellation requires an
+existing scheduled/failed item and its expected revision, but never publication
+readiness, live session access or readable media bytes. Its safe retained preview
+marks account/media references unverified and omits unsafe links. The private
+`cancellationQueueBindings` snapshot binds the raw queue identity/state, including
+changes hidden by redaction, rather than live account settings or label fallbacks.
+Later cancellation commit must independently approve and recheck this queue binding;
+deleting credentials/media alone must not revoke the ability to stop the item.
+Missing/changed publication bindings are conservative conflicts, not a claim that
+authentication succeeded.
+The valid title-only Dribbble/Pinterest schedule persistence disagreement is now
+repaired narrowly, with unrelated legacy normalization retained.
+
 ## Frozen first-release tool contract (control API v1)
 
 Expose a bounded catalog directly. No hidden-tool search, unrestricted HTTP
@@ -405,10 +464,12 @@ host/protocol/port and a single loopback peer are accepted. Forwarded headers,
 substituted hosts and multi-hop/non-loopback peers are rejected. The API never
 redirects. Framework headers do not substitute for the required loopback bind.
 
-The seven implemented reads are status, targets, draft, media detail, retained
+The initial seven reads are status, targets, draft, media detail, retained
 post collection/detail and scheduled collection. They validate every output,
 set `Cache-Control: no-store` and do not import scheduler/provider facades.
-Status reports configured scheduler enablement, not a timer/login health probe.
+Action lookup adds a pure eighth read. Preparation is the only newly enabled local
+mutation; it does not authorize or execute a publication. Status reports configured
+scheduler enablement, not a timer/login health probe.
 Targets use each saved profile's own configuration/defaults. A `platform:base`
 target exists only when legacy local/environment provider fields are explicitly
 present and never follows the active profile. Ambiguous duplicate identities
@@ -432,7 +493,8 @@ the selected stored regular file. Corrupt metadata, ID/size/digest mismatches an
 symlink media are explicit errors. Config reads validate persisted shapes and
 unique IDs; malformed/unreadable state is `storage_corrupt`/`storage_unavailable`,
 while a genuinely absent config file is an empty initial state. Legacy UI routes
-retain their established normalization and side effects.
+retain their established behavior without control setup; control-enabled mutation
+paths share the durable ownership and fail-closed storage guards.
 
 Pagination orders targets by ID, history by descending creation time then ID,
 and schedules by scheduled time then ID. Cursors bind the instance, collection,

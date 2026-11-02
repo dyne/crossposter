@@ -1,5 +1,5 @@
 import type { Platform } from "@/lib/types";
-import type { PreflightIssue } from "./media-policy";
+import { requiresLocalMedia, type PreflightIssue } from "./media-policy";
 import {
   devtoBodyBytesLimit, postLimitIssuesForTargets, postTextLimitForPlatform,
   platformLabel, textBytes, textLength, titleLengthForPlatform, titleLimitForPlatform, titleLimitIssues
@@ -74,10 +74,8 @@ export function getDraftValidation({
       }
     : null;
   const showHackerNewsLink = selectedPlatforms.includes("hackernews");
-  const hasInstagram = selectedPlatforms.includes("instagram");
   const hasYouTube = selectedPlatforms.includes("youtube");
   const hasDribbble = selectedPlatforms.includes("dribbble");
-  const hasPinterest = selectedPlatforms.includes("pinterest");
   const isHackerNewsOnly = showHackerNewsLink && selectedPlatforms.length === 1;
   const hasOnlyTextOptionalPlatforms = selectedPlatforms.every((platform) =>
     platform === "hackernews" ||
@@ -87,10 +85,7 @@ export function getDraftValidation({
   const hasRequiredHackerNewsTitle = !showHackerNewsLink || Boolean(title.trim());
   const hasRequiredYouTubeTitle = !hasYouTube || Boolean(title.trim());
   const hasRequiredDribbbleTitle = !hasDribbble || Boolean(title.trim());
-  const hasRequiredInstagramMedia = !hasInstagram || Boolean(mediaFile);
-  const hasRequiredYouTubeMedia = !hasYouTube || Boolean(mediaFile);
-  const hasRequiredDribbbleMedia = !hasDribbble || Boolean(mediaFile);
-  const hasRequiredPinterestMedia = !hasPinterest || Boolean(mediaFile);
+  const hasRequiredMedia = selectedPlatforms.every((platform) => !requiresLocalMedia(platform) || Boolean(mediaFile));
   const hasRequiredPostText =
     Boolean(text.trim()) ||
     (isHackerNewsOnly && Boolean(title.trim())) ||
@@ -105,10 +100,7 @@ export function getDraftValidation({
     hasRequiredHackerNewsTitle &&
     hasRequiredYouTubeTitle &&
     hasRequiredDribbbleTitle &&
-    hasRequiredInstagramMedia &&
-    hasRequiredYouTubeMedia &&
-    hasRequiredDribbbleMedia &&
-    hasRequiredPinterestMedia &&
+    hasRequiredMedia &&
     hasRequiredPostText &&
     preflightIssues.length === 0 &&
     !hasLimitIssues &&

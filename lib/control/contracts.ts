@@ -226,6 +226,7 @@ export const controlTools = {
 } as const;
 export type ControlToolName = keyof typeof controlTools;
 export type ControlContent = z.infer<typeof contentSchema>;
+export type ControlMedia = z.infer<typeof mediaSchema>;
 export type ControlOutcome = z.infer<typeof targetOutcomeSchema>;
 export type ControlPost = z.infer<typeof postSchema>;
 export type ControlScheduledPost = z.infer<typeof scheduledPostSchema>;
