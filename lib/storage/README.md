@@ -13,6 +13,8 @@ URL/config rules; request validation is a separate boundary. The configuration
 store receives JSON IO, defaults and environment lookup. It keeps active profile,
 local value, environment and field-default precedence, including the existing
 exclusion of local/environment credentials for explicitly selected profiles.
+Explicit `uncertain: true` now survives result normalization for both retained
+history and scheduled results; absent/false values keep the legacy shape.
 
 The deliberate schedule-codec exception is valid title-only Dribbble/Pinterest
 content, which now survives round trips (including mixed title-only targets).
@@ -103,6 +105,15 @@ Payload, request key, account bindings and saved times stay immutable, and an
 assigned schedule/post ID cannot be replaced. Final outcomes cannot transition
 back to execution. These are internal persistence rules; approval authority,
 queue acceptance and dispatch remain separate use cases.
+
+Approved immediate publication assigns one stable post ID with its durable claim.
+Each target's dispatching intent precedes its provider call and each safe result
+precedes another target. Failed intent/result persistence stops the sequence;
+interrupted intent is uncertain and never automatically replayed. The immutable
+action journal is authoritative when compatible history storage fails. Pure
+control post reads link that ID to journal outcomes, including known successes
+and never-dispatched targets. A complete journal is not an atomic transaction
+with the remote provider and cannot establish external exactly-once delivery.
 
 ### Legacy operation without control setup
 

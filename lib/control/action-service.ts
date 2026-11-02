@@ -26,6 +26,7 @@ export type ActionDependencies = {
   timezone: () => string;
   now: () => Date;
   createId: () => string;
+  executionView?: (action: StoredAction) => StoredAction;
 };
 
 export function normalizeControlContent(content: ControlContent): ControlContent {
@@ -145,13 +146,16 @@ export function createActionService(deps: ActionDependencies) {
       media: null, draftRevision: null, scheduledFor: current.schedule.scheduledFor, timezone,
       local: scheduledLocal(current.schedule.scheduledFor, timezone), warnings, now: deps.now() });
   }
-  async function readSnapshot(record: ActionRecord): Promise<{ action: StoredAction; assertUnchanged: () => ControlReadConfig }> {
+  async function readSnapshot(record: ActionRecord, execution = false): Promise<{ action: StoredAction; assertUnchanged: () => ControlReadConfig }> {
     const config = deps.readConfig(); const action = record.action;
     const result = (current: ControlReadConfig, state = action.state, assertUnchanged = () => deps.readConfig()) => ({
       action: safeView(record, current, state), assertUnchanged
     });
     if (expired(action)) return result(config, "expired");
-    if (!preparatory.has(action.state)) return result(config);
+    if (!preparatory.has(action.state) && !execution) {
+      const view = deps.executionView?.(action) ?? action;
+      return { action: safeView({ ...record, action: view }, config), assertUnchanged: () => deps.readConfig() };
+    }
     if (action.payload.mode === "cancel") {
       const scheduleId = action.payload.scheduleId;
       const unchanged = (latest: ControlReadConfig) => {
@@ -167,8 +171,21 @@ export function createActionService(deps: ActionDependencies) {
       return result(config, unchanged(config) ? action.state : "conflicting", assertUnchanged);
     }
     try {
-      const current = selected(config, action.payload.targets.map((target) => target.id));
-      if (payloadDigest(current.bindings) !== payloadDigest(record.accountBindings)) return result(config, "conflicting");
+      const allIds = action.payload.targets.map((target) => target.id);
+      const checkedIds = () => {
+        // Approval and claim always bind every target. Once executing, a
+        // completed provider may legitimately have changed its own session.
+        // Re-read outcomes synchronously so an older worker assertion also
+        // checks only pending/current targets, never weakening their bindings.
+        if (!execution || action.state !== "executing") return allIds;
+        const live = deps.readRecords().find((item) => item.action.id === action.id);
+        if (!live || live.action.state !== "executing" || live.action.payloadDigest !== action.payloadDigest) throw new ControlError("action_conflict");
+        return live.action.outcomes.filter((outcome) => ["not_dispatched", "dispatching"].includes(outcome.state)).map((outcome) => outcome.target.id);
+      };
+      const unchangedBindings = (bindings: ActionRecord["accountBindings"], ids: string[]) => payloadDigest(bindings)
+        === payloadDigest(Object.fromEntries(ids.map((id) => [id, record.accountBindings[id]])));
+      const initialIds = checkedIds(); const current = selected(config, initialIds);
+      if (!unchangedBindings(current.bindings, initialIds)) return result(config, "conflicting");
       const mediaId = action.payload.content.mediaId;
       const before = mediaId ? deps.mediaRevision(mediaId) : null;
       const media = mediaId ? await deps.readMedia(mediaId) : null;
@@ -178,8 +195,8 @@ export function createActionService(deps: ActionDependencies) {
       const assertUnchanged = () => {
         try {
           const latest = deps.readConfig();
-          const again = selected(latest, action.payload.targets.map((target) => target.id));
-          if (payloadDigest(again.bindings) !== payloadDigest(record.accountBindings)
+          const ids = checkedIds(); const again = selected(latest, ids);
+          if (!unchangedBindings(again.bindings, ids)
             || (mediaId && deps.mediaRevision(mediaId) !== before)
             || payloadDigest(media ? projectControlMedia(media, projectControlConfig(latest, deps.environmentValue)) : null) !== payloadDigest(action.payload.media)) throw new ControlError("action_conflict");
           if (action.payload.draftRevision !== null && relevantDraft(latest, action.payload.content, action.payload.targets.map((target) => target.id), media?.digest ?? null) !== action.payload.draftRevision) throw new ControlError("action_conflict");
@@ -203,6 +220,10 @@ export function createActionService(deps: ActionDependencies) {
   }
   async function view(record: ActionRecord): Promise<StoredAction> { return (await readSnapshot(record)).action; }
   return {
+    // Execution reuses the same immutable dependency checks. The caller must
+    // invoke assertUnchanged synchronously after its last await before claiming
+    // or dispatching. Already claimed work may outlive the approval deadline.
+    executionSnapshot: (record: ActionRecord) => readSnapshot(record, true),
     async decide(actionId: string, raw: unknown, assertAuthority: () => void): Promise<StoredAction> {
       const input = ownerDecisionInputSchema.safeParse(raw);
       if (!input.success) throw new ControlError("validation_failed");

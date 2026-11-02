@@ -67,6 +67,12 @@ test("production browser authority is independent of machine credentials and dec
     assert.equal((await session({ password: ownerPassword }, { origin: "https://evil.example" })).status, 403);
     assert.equal((await session({ password: ownerPassword }, { "x-forwarded-host": "evil.example" })).status, 403);
     const action = await prepared("approval-runtime-stable"); const journalFile = path.join(data, ".poster-actions.json"); const before = readFileSync(journalFile, "utf8");
+    const commitEndpoint = `${origin}/api/mcp/v1/actions/${action.id}/commit`;
+    const commit = (body) => fetch(commitEndpoint, { method: "POST", headers: { ...machine, "content-type": "application/json" }, body: JSON.stringify(body) });
+    assert.equal((await commit({ expectedDigest: action.payloadDigest, text: "replacement" })).status, 400);
+    const unapprovedCommit = await commit({ expectedDigest: action.payloadDigest });
+    assert.equal(unapprovedCommit.status, 401); assert.equal((await unapprovedCommit.json()).error.code, "approval_required");
+    assert.equal(readFileSync(journalFile, "utf8"), before);
     const login = await session({ password: ownerPassword }); assert.equal(login.status, 200);
     const cookie = login.headers.get("set-cookie").split(";")[0]; const csrf = (await login.json()).data.csrf;
     assert.match(login.headers.get("set-cookie"), /HttpOnly; SameSite=Strict; Path=\/api\/approvals; Max-Age=900/);

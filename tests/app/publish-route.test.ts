@@ -158,7 +158,7 @@ describe("POST /api/publish", () => {
     expect(response.status).toBe(500);
   });
 
-  it("returns partial and uncertain outcomes live while stored history drops uncertain", async () => {
+  it("returns partial and uncertain outcomes and retains uncertainty in stored history", async () => {
     const { providers } = await import("@/lib/providers");
     vi.mocked(providers.x).mockRejectedValue(Object.assign(new Error("Check the fixture profile"), { uncertain: true }));
     const { POST } = await import("@/app/api/publish/route");
@@ -169,7 +169,7 @@ describe("POST /api/publish", () => {
       { platform: "bluesky", targetId: "bluesky", ok: true, message: "Fixture published" },
       { platform: "x", targetId: "x", ok: false, uncertain: true, message: "Check the fixture profile" }
     ]);
-    expect(body.publishedPost.results[1]).not.toHaveProperty("uncertain");
+    expect(body.publishedPost.results[1]).toHaveProperty("uncertain", true);
     const { readLocalConfig } = await import("@/lib/local-config");
     expect(readLocalConfig().publishedPosts[0]).toEqual(body.publishedPost);
   });

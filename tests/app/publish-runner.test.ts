@@ -97,7 +97,7 @@ describe("runPublish public entry point", () => {
       { platform: "bluesky", ok: true, uncertain: undefined, message: "Fixture published" },
       { platform: "mastodon", ok: false, uncertain: undefined, message: "Fixture rejected" }
     ]);
-    expect(result.publishedPost?.results[0]).not.toHaveProperty("uncertain");
+    expect(result.publishedPost?.results[0]).toHaveProperty("uncertain", true);
     const { readLocalConfig } = await import("@/lib/local-config");
     expect(readLocalConfig().publishedPosts).toEqual([result.publishedPost]);
   });

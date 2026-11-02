@@ -1,7 +1,8 @@
 import { getConfigValue } from "@/lib/local-config";
+import { publicationConfig } from "@/lib/publishing/config-context";
 
 export function requireEnv(name: string, profileId?: string): string {
-  const value = getConfigValue(name, profileId);
+  const value = optionalEnv(name, profileId);
 
   if (!value) {
     throw new Error(`Missing ${name}`);
@@ -11,5 +12,6 @@ export function requireEnv(name: string, profileId?: string): string {
 }
 
 export function optionalEnv(name: string, profileId?: string): string | undefined {
-  return getConfigValue(name, profileId);
+  const exact = publicationConfig();
+  return exact ? exact[name] || undefined : getConfigValue(name, profileId);
 }

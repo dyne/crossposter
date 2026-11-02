@@ -7,6 +7,8 @@ import { ControlError, publicError } from "./errors";
 import { createControlReadService, type ReadToolName } from "./read-service";
 import { controlMediaRevision, readControlConfig, readControlMedia } from "./read-storage";
 import { ownerApprovalConfigured } from "./owner-auth";
+import { readActionJournal } from "./action-store";
+import { executionView } from "./execution-state";
 
 const statuses: Partial<Record<ReturnType<typeof publicError>["code"], number>> = {
   validation_failed: 400, unauthorized: 401, forbidden: 403, instance_mismatch: 409,
@@ -14,7 +16,7 @@ const statuses: Partial<Record<ReturnType<typeof publicError>["code"], number>> 
   action_missing: 404, schedule_missing: 404, revision_conflict: 409, ownership_conflict: 409,
   idempotency_conflict: 409, action_conflict: 409,
   approval_required: 401, approval_setup_required: 409, approval_expired: 409, approval_rejected: 409,
-  cursor_invalid: 400, cursor_stale: 409, storage_corrupt: 500, storage_unavailable: 503
+  cursor_invalid: 400, cursor_stale: 409, storage_corrupt: 500, storage_unavailable: 503, backend_unavailable: 503
 };
 const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff" };
 
@@ -68,7 +70,8 @@ export async function controlRead(request: Request, name: ReadToolName, params: 
       instanceId: auth.instanceId, backendVersion: packageInfo.version,
       schedulerEnabled: process.env.POSTER_DISABLE_SCHEDULER !== "true",
       approvalConfigured: () => ownerApprovalConfigured(auth.canonicalRoot),
-      environmentValue: (field) => process.env[field]
+      environmentValue: (field) => process.env[field],
+      readRecords: () => readActionJournal(auth.canonicalRoot).records, executionView: (action) => executionView(auth.canonicalRoot, action)
     });
     const data = await service.read(name, parsed.data);
     return controlSuccess(name, data);
