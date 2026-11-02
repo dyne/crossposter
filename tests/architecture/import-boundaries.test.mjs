@@ -56,3 +56,17 @@ test("resolves present static CSS modules without allowing missing styles or hid
   files.set("components/helper.ts", 'import "node:fs";');
   assert.match(checkBoundaries(files).join("\n"), /forbidden.*helper.*node:fs/);
 });
+
+test("Node bridge can share credentials/contracts but cannot import backend ownership, server-only, Next or providers", () => {
+  const files = new Map([
+    ["mcp/server.ts", 'import { read } from "../lib/control/credential"; import "node:fs";'],
+    ["lib/control/credential.ts", 'import "node:crypto"; export const read = () => {};']
+  ]);
+  assert.deepEqual(checkBoundaries(files), []);
+  for (const dependency of ['"server-only"', '"next/server"', '"../lib/providers/index"', '"../lib/control/backend-ownership"']) {
+    files.set("mcp/server.ts", `import ${dependency};`);
+    files.set("lib/providers/index.ts", "export const provider = 1;");
+    files.set("lib/control/backend-ownership.ts", 'import "server-only";');
+    assert.ok(checkBoundaries(files).length > 0, dependency);
+  }
+});
