@@ -99,7 +99,8 @@ describe("immutable action preparation", () => {
   it("retains rejected actions without requiring the deleted live profile", async () => {
     const f = await fixture(); const action = await f.service.prepare(publication()); const record = f.deps.readRecords()[0];
     const { createActionStore, actionRevision } = await import("@/lib/control/action-store"); const { assertBackendMutation } = await import("@/lib/control/backend-mutation");
-    const rejected = { ...record, action: { ...action, state: "rejected" as const } }; rejected.action.revision = actionRevision(rejected.action);
+    const rejected = { ...record, ownerDecision: { actionId: action.id, payloadDigest: action.payloadDigest, preparationRevision: action.revision,
+      expiresAt: action.expiresAt, decision: "reject" as const, decidedAt: action.createdAt }, action: { ...action, state: "rejected" as const } }; rejected.action.revision = actionRevision(rejected.action);
     createActionStore(f.root, assertBackendMutation(f.root)!).save(rejected, action.revision);
     const config = f.config(); config.profiles = {}; f.write(config);
     const before = fs.readFileSync(path.join(f.root, ".poster-actions.json"), "utf8");

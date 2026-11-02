@@ -193,6 +193,34 @@ label change alone does not change the retained queue identity. Expiry is derive
 without updating the journal. `CROSSPOSTER_TIMEZONE` selects the IANA display zone
 (default `Europe/Berlin`); offset-bearing future instants are stored in UTC.
 
+`owner-auth.ts` separately authenticates the configured local admin password.
+Opaque random in-memory sessions and their CSRF secrets are independent of the
+machine token; sessions expire after fifteen minutes and are revoked by password
+changes or backend restart. Exact loopback origin/host checks protect the browser
+adapters under `app/api/approvals/`; machine authentication headers are refused.
+Five failed logins close a fifteen-minute attempt window. MCP has no owner login
+or decision operation. Configure the password locally as described in the README.
+
+`action-service.ts` revalidates the frozen action before an owner decision, then
+rechecks browser authority, deadline and journal revision after asynchronous IO.
+Its verified snapshot returns a synchronous dependency assertion, invoked after
+the final await before writing: account/session bindings, media file/metadata
+identity, relevant draft and queue revisions are checked again. Cancellation
+continues to bind only the retained queue snapshot and cancellable state.
+The synchronous journal CAS retains a private immutable `ownerDecision` binding
+the action ID, digest, preparation revision, expiry, choice and decision time.
+Approved/rejected states require this record, which survives restart and stays
+out of public action DTOs. Approval never calls a provider, scheduler or enqueue.
+The future commit operation must independently verify that retained authorization.
+
+`app/approvals/[id]` renders a focused owner review through browser-only adapters.
+Its client keeps the session's CSRF value in memory, clears submitted passwords,
+guards overlapping decisions and aborts superseded/unmounted reads. The complete
+immutable preview precedes explicit Approve/Reject controls. Visible lifecycle
+states distinguish approval, later commit, accepted schedules and recorded
+publication outcomes. Only approval routes receive DENY/frame-ancestors headers;
+the composer and settings retain their existing presentation and behavior.
+
 Trace a failure through route response → publishing service → adapter result →
 history/storage, using synthetic input and intercepted IO. Capture the target/
 profile, error category and whether external completion was known; redact

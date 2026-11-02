@@ -42,3 +42,17 @@ test("permits erased types while rejecting runtime provider and storage coupling
   files.set("lib/storage/config-codec.ts", 'const fs = require("fs");');
   assert.match(checkBoundaries(files).join("\n"), /config-codec.*fs/);
 });
+
+test("resolves present static CSS modules without allowing missing styles or hidden Node imports", () => {
+  const files = new Map([
+    ["components/approval.tsx", '"use client"; import styles from "./approval.module.css"; import { value } from "./helper";'],
+    ["components/approval.module.css", ".page { color: green; }"],
+    ["components/helper.ts", "export const value = 1;"]
+  ]);
+  assert.deepEqual(checkBoundaries(files), []);
+  files.delete("components/approval.module.css");
+  assert.match(checkBoundaries(files).join("\n"), /unresolved.*approval.module.css/);
+  files.set("components/approval.module.css", ".page { color: green; }");
+  files.set("components/helper.ts", 'import "node:fs";');
+  assert.match(checkBoundaries(files).join("\n"), /forbidden.*helper.*node:fs/);
+});

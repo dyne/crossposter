@@ -1,0 +1,57 @@
+.page { max-width: 1040px; }
+.page h1 { margin: 28px 0 8px; font-size: 2rem; }
+.intro { margin: 0 0 24px; color: var(--muted); line-height: 1.5; }
+.header { position: static; flex-wrap: wrap; }
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--heading-ink); text-decoration: none; font-family: var(--font-display), sans-serif; font-size: 1.5rem; }
+.headerActions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.review { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow-wrap: anywhere; }
+.review h2 { margin: 0 0 12px; font-size: 1.3rem; }
+.review h3 { margin: 20px 0 8px; font-size: 0.875rem; color: var(--muted); }
+.review p { margin: 8px 0; line-height: 1.6; }
+.review code { font-family: var(--font-mono), monospace; font-size: 0.82rem; line-height: 1.6; overflow-wrap: anywhere; }
+.review time { font-variant-numeric: tabular-nums; line-height: 1.6; }
+.review small { display: block; margin-top: 8px; color: var(--muted); line-height: 1.5; }
+.status { padding: 24px; border-bottom: 1px solid var(--line); background: var(--panel-soft); }
+.status p { max-width: 72ch; }
+.success { background: var(--accent-wash); }
+.section { padding: 24px; border-bottom: 1px solid var(--line); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 32px; padding: 4px 24px 24px; border-bottom: 1px solid var(--line); }
+.targets { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.targets li { display: grid; gap: 4px; }
+.targets span { color: var(--muted); }
+.exact { white-space: pre-wrap; max-width: 74ch; }
+.muted { color: var(--muted); }
+.link { display: inline-block; line-height: 1.6; }
+.media { display: block; width: 100%; height: auto; max-height: 380px; object-fit: contain; margin: 16px 0; background: var(--media-bg); }
+.warnings { padding-left: 22px; margin-bottom: 0; line-height: 1.6; }
+.warnings li + li { margin-top: 8px; }
+.decision { padding: 24px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.primary, .secondary, .reject { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid var(--line); border-radius: 7px; padding: 10px 18px; font-weight: 800; line-height: 1.4; background: var(--panel); color: var(--ink); transition: background-color 150ms ease-out; }
+.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+.reject { color: var(--danger); border-color: var(--danger-line); }
+.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.secondary:hover:not(:disabled) { background: var(--panel-soft); border-color: var(--line-hover); }
+.reject:hover:not(:disabled) { background: var(--danger-soft); }
+.primary:disabled, .secondary:disabled, .reject:disabled { opacity: 0.55; }
+.page :is(button, a, input, h2):focus-visible { outline: 3px solid var(--accent-dark); outline-offset: 4px; }
+.page a { color: var(--accent-dark); text-underline-offset: 3px; }
+.page .brand { color: var(--heading-ink); }
+.page input { caret-color: var(--accent-dark); }
+.page ::selection { background: var(--accent); color: var(--accent-contrast); }
+.error { margin: 24px; padding: 16px; border: 1px solid var(--danger-line); border-radius: 7px; color: var(--danger); background: var(--danger-wash); line-height: 1.6; }
+.login { display: grid; gap: 14px; max-width: 520px; margin-bottom: 20px; }
+.login label { font-weight: 700; }
+.login .primary { justify-self: start; }
+.skip { position: absolute; left: 20px; top: -100px; z-index: 50; padding: 12px; background: var(--panel); }
+.skip:focus { top: 8px; }
+@media (max-width: 700px) {
+  .page { width: calc(100% - 24px); padding-top: 12px; }
+  .page h1 { font-size: 1.7rem; }
+  .headerActions { width: 100%; justify-content: space-between; }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .section, .status, .decision { padding: 20px; }
+  .facts { padding: 0 20px 20px; }
+  .buttons > button { flex: 1 1 130px; }
+}
+@media (prefers-reduced-motion: reduce) { .primary, .secondary, .reject { transition: none; } }

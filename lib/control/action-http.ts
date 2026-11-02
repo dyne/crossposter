@@ -20,7 +20,7 @@ export async function controlAction(request: Request, name: "prepare_action" | "
     const owner = () => { const claim = assertBackendMutation(root); if (!claim) throw new ControlError("ownership_conflict"); return claim; };
     const service = createActionService({
       readConfig: () => readControlConfig(root), readRecords: () => readActionJournal(root).records,
-      saveRecord: (record) => createActionStore(root, owner()).save(record, null), assertMutation: () => { owner(); },
+      saveRecord: (record, revision = null) => createActionStore(root, owner()).save(record, revision), assertMutation: () => { owner(); },
       readMedia: (id) => readControlMedia(root, id), mediaRevision: (id) => controlMediaRevision(root, id),
       bindAccount: (target) => bindControlAccount(root, credential.token, target), environmentValue: (field) => process.env[field],
       timezone: () => process.env.CROSSPOSTER_TIMEZONE || "Europe/Berlin", now: () => new Date(), createId: randomUUID

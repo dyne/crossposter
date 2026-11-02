@@ -12,6 +12,8 @@ const useCase = /^lib\/(publishing\/service|scheduling\/(service|policy|queries)
 // Parse syntax rather than matching import text: comments and erased type-only
 // imports do not create browser dependencies. Include re-exports/dynamic imports.
 function runtimeImports(filename, source) {
+  // Stylesheets are resolved static assets, not executable JS dependency roots.
+  if (filename.endsWith(".css")) return [];
   const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true);
   const imports = [];
   function visit(node) {
@@ -47,6 +49,7 @@ export function checkBoundaries(files) {
   const imports = new Map([...files].map(([name, source]) => [name, runtimeImports(name, source)]));
   const violations = new Set();
   for (const [root, source] of files) {
+    if (root.endsWith(".css")) continue;
     const syntax = ts.createSourceFile(root, source, ts.ScriptTarget.Latest, true);
     const browser = syntax.statements.some((statement) => ts.isExpressionStatement(statement)
       && ts.isStringLiteral(statement.expression) && statement.expression.text === "use client")
@@ -81,7 +84,7 @@ export function readProductionSources(root) {
     for (const entry of readdirSync(path.join(root, relative), { withFileTypes: true })) {
       const filename = `${relative}/${entry.name}`;
       if (entry.isDirectory()) visit(filename);
-      else if (/\.tsx?$/.test(filename)) files.set(filename, readFileSync(path.join(root, filename), "utf8"));
+      else if (/\.(?:tsx?|css)$/.test(filename)) files.set(filename, readFileSync(path.join(root, filename), "utf8"));
     }
   }
   for (const directory of ["app", "components", "lib"]) visit(directory);

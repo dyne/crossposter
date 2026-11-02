@@ -9,6 +9,7 @@ import { resolveControlTarget, type ResolvedControlTarget } from "./account-bind
 import { actionRevision, type ActionRecord, type StoredAction } from "./action-store";
 import { projectControlConfig, projectControlDraft, projectControlMedia, projectControlSchedule } from "./read-projections";
 import type { ControlReadConfig, QueuedPost } from "./read-storage";
+import { ownerDecisionInputSchema } from "./approval-contracts";
 
 type Input = z.infer<typeof prepareActionInputSchema>;
 type PublicationInput = Exclude<Input, { mode: "cancel" }>;
@@ -16,7 +17,7 @@ type Media = ControlMedia & { dimensions?: { width: number; height: number } };
 export type ActionDependencies = {
   readConfig: () => ControlReadConfig;
   readRecords: () => ActionRecord[];
-  saveRecord: (record: ActionRecord) => ActionRecord;
+  saveRecord: (record: ActionRecord, expectedRevision?: string | null) => ActionRecord;
   assertMutation: () => void;
   readMedia: (id: string) => Promise<Media>;
   mediaRevision: (id: string) => string;
@@ -144,41 +145,95 @@ export function createActionService(deps: ActionDependencies) {
       media: null, draftRevision: null, scheduledFor: current.schedule.scheduledFor, timezone,
       local: scheduledLocal(current.schedule.scheduledFor, timezone), warnings, now: deps.now() });
   }
-  async function view(record: ActionRecord): Promise<StoredAction> {
+  async function readSnapshot(record: ActionRecord): Promise<{ action: StoredAction; assertUnchanged: () => ControlReadConfig }> {
     const config = deps.readConfig(); const action = record.action;
-    if (expired(action)) return safeView(record, config, "expired");
-    if (!preparatory.has(action.state)) return safeView(record, config);
+    const result = (current: ControlReadConfig, state = action.state, assertUnchanged = () => deps.readConfig()) => ({
+      action: safeView(record, current, state), assertUnchanged
+    });
+    if (expired(action)) return result(config, "expired");
+    if (!preparatory.has(action.state)) return result(config);
     if (action.payload.mode === "cancel") {
-      const scheduleId = action.payload.scheduleId; const post = config.scheduledPosts.find((item) => item.id === scheduleId);
-      const conflict = !post || !["scheduled", "failed"].includes(post.status)
-        || payloadDigest(cancellationQueueBindings(post, action.payload.targets.map((target) => target.id))) !== payloadDigest(record.accountBindings);
-      return safeView(record, config, conflict ? "conflicting" : action.state);
+      const scheduleId = action.payload.scheduleId;
+      const unchanged = (latest: ControlReadConfig) => {
+        const post = latest.scheduledPosts.find((item) => item.id === scheduleId);
+        return post && ["scheduled", "failed"].includes(post.status)
+          && payloadDigest(cancellationQueueBindings(post, action.payload.targets.map((target) => target.id))) === payloadDigest(record.accountBindings);
+      };
+      const assertUnchanged = () => {
+        const latest = deps.readConfig();
+        if (!unchanged(latest)) throw new ControlError("action_conflict");
+        safeView(record, latest); return latest;
+      };
+      return result(config, unchanged(config) ? action.state : "conflicting", assertUnchanged);
     }
     try {
       const current = selected(config, action.payload.targets.map((target) => target.id));
-      if (payloadDigest(current.bindings) !== payloadDigest(record.accountBindings)) return safeView(record, config, "conflicting");
+      if (payloadDigest(current.bindings) !== payloadDigest(record.accountBindings)) return result(config, "conflicting");
       const mediaId = action.payload.content.mediaId;
       const before = mediaId ? deps.mediaRevision(mediaId) : null;
       const media = mediaId ? await deps.readMedia(mediaId) : null;
-      const latest = deps.readConfig();
-      const again = selected(latest, action.payload.targets.map((target) => target.id));
-      if (payloadDigest(again.bindings) !== payloadDigest(record.accountBindings)
-        || (mediaId && deps.mediaRevision(mediaId) !== before)
-        || payloadDigest(media ? projectControlMedia(media, projectControlConfig(latest, deps.environmentValue)) : null) !== payloadDigest(action.payload.media)) return safeView(record, latest, "conflicting");
-      if (action.payload.draftRevision !== null && relevantDraft(latest, action.payload.content, action.payload.targets.map((target) => target.id), media?.digest ?? null) !== action.payload.draftRevision) return safeView(record, latest, "conflicting");
-      if (action.payload.mode === "reschedule") {
-        const payload = action.payload;
-        const post = latest.scheduledPosts.find((item) => item.id === payload.scheduleId);
-        if (!post || !["scheduled", "failed"].includes(post.status)
-          || projectControlSchedule(post, projectControlConfig(latest, deps.environmentValue)).revision !== action.payload.expectedRevision) return safeView(record, latest, "conflicting");
-      }
-      return safeView(record, latest, expired(action) ? "expired" : action.state);
+      // Keep the byte-verified media and its pre-read identity in this closure.
+      // A decision invokes it again synchronously after its final await, just
+      // before the journal CAS. Account binding also rereads local sessions.
+      const assertUnchanged = () => {
+        try {
+          const latest = deps.readConfig();
+          const again = selected(latest, action.payload.targets.map((target) => target.id));
+          if (payloadDigest(again.bindings) !== payloadDigest(record.accountBindings)
+            || (mediaId && deps.mediaRevision(mediaId) !== before)
+            || payloadDigest(media ? projectControlMedia(media, projectControlConfig(latest, deps.environmentValue)) : null) !== payloadDigest(action.payload.media)) throw new ControlError("action_conflict");
+          if (action.payload.draftRevision !== null && relevantDraft(latest, action.payload.content, action.payload.targets.map((target) => target.id), media?.digest ?? null) !== action.payload.draftRevision) throw new ControlError("action_conflict");
+          if (action.payload.mode === "reschedule") {
+            const payload = action.payload;
+            const post = latest.scheduledPosts.find((item) => item.id === payload.scheduleId);
+            if (!post || !["scheduled", "failed"].includes(post.status)
+              || projectControlSchedule(post, projectControlConfig(latest, deps.environmentValue)).revision !== action.payload.expectedRevision) throw new ControlError("action_conflict");
+          }
+          safeView(record, latest); return latest;
+        } catch (error) {
+          if (error instanceof ControlError && ["target_missing", "media_missing", "validation_failed"].includes(error.code)) throw new ControlError("action_conflict");
+          throw error;
+        }
+      };
+      return result(assertUnchanged(), expired(action) ? "expired" : action.state, assertUnchanged);
     } catch (error) {
-      if (error instanceof ControlError && ["target_missing", "media_missing", "action_conflict", "validation_failed"].includes(error.code)) return safeView(record, deps.readConfig(), "conflicting");
+      if (error instanceof ControlError && ["target_missing", "media_missing", "action_conflict", "validation_failed"].includes(error.code)) return result(deps.readConfig(), "conflicting");
       throw error;
     }
   }
+  async function view(record: ActionRecord): Promise<StoredAction> { return (await readSnapshot(record)).action; }
   return {
+    async decide(actionId: string, raw: unknown, assertAuthority: () => void): Promise<StoredAction> {
+      const input = ownerDecisionInputSchema.safeParse(raw);
+      if (!input.success) throw new ControlError("validation_failed");
+      const decision = input.data;
+      const record = deps.readRecords().find((item) => item.action.id === actionId);
+      if (!record) throw new ControlError("action_missing");
+      if (record.action.payloadDigest !== decision.expectedDigest || record.action.expiresAt !== decision.expiresAt) throw new ControlError("action_conflict");
+      const previous = record.ownerDecision;
+      if (previous ? previous.preparationRevision !== decision.expectedRevision || previous.decision !== decision.decision
+        : record.action.revision !== decision.expectedRevision || record.action.state !== "prepared") throw new ControlError("revision_conflict");
+      // Reuse the same account/media/draft/queue and deadline validation as the
+      // immutable preview. No provider or scheduler is reachable from here.
+      const snapshot = await readSnapshot(record); const current = snapshot.action;
+      if (current.state === "expired") throw new ControlError("approval_expired");
+      if (current.state !== (previous ? (previous.decision === "approve" ? "approved" : "rejected") : "prepared")) throw new ControlError("action_conflict");
+      deps.assertMutation();
+      // Authentication can expire or be revoked while stored media is read.
+      assertAuthority();
+      const latest = deps.readRecords().find((item) => item.action.id === actionId);
+      if (!latest || latest.action.revision !== record.action.revision) throw new ControlError("revision_conflict");
+      const config = snapshot.assertUnchanged();
+      const now = deps.now();
+      if (now.getTime() >= Date.parse(record.action.expiresAt) || ((record.action.payload.mode === "schedule"
+        || record.action.payload.mode === "reschedule") && now.getTime() >= Date.parse(record.action.payload.scheduledFor))) throw new ControlError("approval_expired");
+      if (previous) return current;
+      const action: StoredAction = { ...record.action, state: decision.decision === "approve" ? "approved" : "rejected" };
+      action.revision = actionRevision(action);
+      const saved = deps.saveRecord({ ...record, action, ownerDecision: { actionId, payloadDigest: action.payloadDigest,
+        preparationRevision: decision.expectedRevision, expiresAt: action.expiresAt, decision: decision.decision, decidedAt: now.toISOString() } }, record.action.revision);
+      return safeView(saved, config);
+    },
     async get(actionId: string) {
       const record = deps.readRecords().find((item) => item.action.id === actionId);
       if (!record) throw new ControlError("action_missing");
