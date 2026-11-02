@@ -46,6 +46,7 @@
     "test:coverage": "vitest run --coverage",
     "test:boundaries": "node --test tests/architecture/import-boundaries.test.mjs",
     "test:e2e": "playwright test",
+    "test:control-runtime": "node --test tests/control-runtime.test.mjs",
     "test:browser-verification": "python3 -B -m unittest discover -s tests -p 'test_*.py'"
   },
   "dependencies": {
@@ -58,7 +59,8 @@
     "simple-icons": "^16.35.0",
     "typescript": "^5.9.3",
     "youtubei.js": "^17.2.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod-control": "npm:zod@4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
