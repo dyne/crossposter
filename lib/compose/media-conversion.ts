@@ -1,6 +1,6 @@
 import { composeClient, type UploadedMedia } from "./client";
 
-export function fileKind(file: File | null): UploadedMedia["kind"] {
+export function fileKind(file: Pick<File, "type"> | null): UploadedMedia["kind"] {
   if (!file) {
     return "file";
   }

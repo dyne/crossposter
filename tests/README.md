@@ -63,7 +63,7 @@ Unit/component tests use the isolation helpers described in
 [app/README.md](app/README.md). They exercise real TypeScript route, runner,
 configuration and media modules with disposable roots and intercepted IO.
 [Characterization notes](app/characterization.md) record existing disagreements
-that this refactor preserves.
+and the deliberately scoped Dribbble/Pinterest title-only persistence repair.
 
 The Chromium smoke tests exercise draft editing/reload, theme persistence,
 mocked publishing with an uncertain result, and schedule controls/navigation.

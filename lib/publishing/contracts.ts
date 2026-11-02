@@ -12,7 +12,7 @@ const targetSchema = z.object({
   profileLabel: z.string().max(180).optional()
 });
 
-function normalizeOptionalUrl(value: unknown): unknown {
+export function normalizeOptionalUrl(value: unknown): unknown {
   if (typeof value !== "string") {
     return value;
   }
@@ -28,6 +28,12 @@ function normalizeOptionalUrl(value: unknown): unknown {
   }
 
   return `https://${trimmed}`;
+}
+
+// The publishing service executes this exact trimmed content. Preparations use
+// it after URL coercion so approval never describes text later changed by IO.
+export function normalizePublishContent(value: { title?: string; text: string; linkUrl?: string }) {
+  return { title: value.title?.trim() || undefined, text: value.text.trim(), linkUrl: value.linkUrl?.trim() || undefined };
 }
 
 const optionalUrlSchema = z.preprocess(

@@ -4,6 +4,14 @@
 poster.config.local.json
 poster.config.local.json.bak*
 .poster-control.json
+.poster-owner.json
+.poster-owner-*.tmp
+.poster-owner-recovery
+.poster-actions.json
+.poster-actions.anchor.json
+.poster-actions.json.*.tmp
+.poster-actions.anchor.json.*.tmp
+poster.config.local.json.*.tmp
 .instagram-sessions
 .instagram-browser
 .x-browser

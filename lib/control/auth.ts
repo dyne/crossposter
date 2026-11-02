@@ -23,7 +23,7 @@ export function isControlOrigin(value: string): boolean {
   } catch { return false; }
 }
 
-export function authenticateControl(request: Request, root: string) {
+export function readControlCredential(root: string) {
   let canonicalRoot: string;
   let credential: z.infer<typeof credentialSchema>;
   try {
@@ -31,14 +31,28 @@ export function authenticateControl(request: Request, root: string) {
     const filename = path.join(canonicalRoot, ".poster-control.json");
     const stat = lstatSync(filename);
     if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || stat.size > 16384
-      || (typeof process.getuid === "function" && stat.uid !== process.getuid())) throw new Error();
+      || (typeof process.getuid === "function" && stat.uid !== process.getuid())) throw new ControlError("storage_corrupt");
     credential = credentialSchema.parse(JSON.parse(readFileSync(filename, "utf8")));
-    if (!isControlOrigin(credential.origin)) throw new Error();
-  } catch { throw new ControlError("unauthorized"); }
+    if (!isControlOrigin(credential.origin)) throw new ControlError("storage_corrupt");
+  } catch (error) {
+    if (error instanceof ControlError) throw error;
+    if (error instanceof Error && (error instanceof SyntaxError || error.name === "ZodError")) throw new ControlError("storage_corrupt");
+    throw new ControlError("storage_unavailable");
+  }
   if (credential.rootBinding !== hash(canonicalRoot)
     || credential.instanceId !== controlInstanceId(credential.rootBinding, credential.backendId)) {
     throw new ControlError("instance_mismatch");
   }
+  return { canonicalRoot, credential };
+}
+
+export function authenticateControl(request: Request, root: string) {
+  let setup: ReturnType<typeof readControlCredential>;
+  try { setup = readControlCredential(root); } catch (error) {
+    if (error instanceof ControlError && error.code === "instance_mismatch") throw error;
+    throw new ControlError("unauthorized");
+  }
+  const { canonicalRoot, credential } = setup;
   const url = new URL(request.url);
   const expectedOrigin = new URL(credential.origin);
   const forwarded = (name: string, expected: string) => request.headers.has(name) && request.headers.get(name) !== expected;

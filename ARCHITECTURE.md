@@ -13,6 +13,7 @@ when moving code; consumers should not need a migration.
 | Publishing use case and provider contract | `lib/publishing/service.ts`, `lib/publishing/provider.ts`; production wiring in `lib/publish-runner.ts` and `lib/providers/index.ts` | [service failures/results](tests/app/publish-service.test.ts), [adapter contracts](tests/app/provider-contract.test.ts) |
 | Queue policy, tick, timer and route queries | `lib/scheduling/`; production wiring in `lib/scheduler.ts`, adapters in `app/api/scheduled/` | [tick/interleavings](tests/app/scheduling-service.test.ts), [lifecycle](tests/app/scheduler-lifecycle.test.ts), [item routes](tests/app/schedule-item-route.test.ts) |
 | Persisted-data normalization and IO | `lib/storage/*codec*.ts` plus `codec-helpers.ts`; config/media stores and IO adapters in `lib/storage/`; facades `lib/local-config.ts`, `lib/media-store.ts` | [legacy normalization](tests/app/storage-normalization.test.ts), [adapter behavior](tests/app/storage-adapters.test.ts) |
+| Local control, immutable preparation and replay | `lib/control/`; authenticated adapters in `app/api/mcp/v1/`; projections share the existing rules and normalized publishing content | [preparation and pure reads](tests/app/control-actions.test.ts), [ownership/durability](tests/app/control-storage.test.ts) |
 | Composer | `app/page.tsx` composes `components/composer/`; draft/media/actions hooks own their async resources; browser helpers/clients in `lib/compose/` | [lifecycle/order](tests/app/composer-lifecycle.test.tsx), [page flows](tests/app/composer-components.test.tsx) |
 | Settings | `app/settings/settings-client.tsx` composes `components/settings/`; configuration/profile state in `use-settings-config.ts`, other actions in their panel hooks; DTO/client/metadata in `lib/settings/` | [profile state](tests/app/settings-state.test.tsx), [mocked panels](tests/app/settings-panels.test.tsx) |
 | Scheduled calendar | `app/scheduled/page.tsx` composes `components/scheduled/`; calendar math/presentation in `lib/scheduled/` | [date rules](tests/app/scheduled-calendar.test.ts), [state/errors](tests/app/scheduled-state.test.tsx) |
@@ -93,6 +94,45 @@ the worker/static marketing tree are intentionally absent from the runtime pack.
 
 ## Debugging uncertain outcomes and existing limits
 
+When `.poster-control.json` is configured, `lib/control/backend-mutation.ts`
+checks the setup, sole backend claim, configuration and action journal before
+production mutations. The guard is shared by the optional dashboard's storage,
+media, publishing and scheduling paths. The canonical data root has one durable
+`.poster-owner.json` claim; another live backend is refused. Claims lost or
+replaced during operation fail closed. Control reads remain pure and do not
+acquire ownership or initialize storage. Without control setup and its retained
+artifacts, the legacy behavior below remains in force.
+
+`lib/control/action-store.ts` retains immutable payloads, replay keys and terminal
+action/post/schedule identities in a versioned private journal. JSON replacement
+writes a private temporary file, flushes it, renames it and flushes the directory.
+A durable initialization marker prevents a disappeared journal from becoming an
+empty replay store after restart. See the [storage notes](lib/storage/README.md)
+for failure and stale-owner recovery rules. Preparation and execution authority
+are separate from this persistence boundary.
+
+Readers and durable writers share the same 64 MiB serialized UTF-8 ceiling;
+overflow is rejected before replacing readable state. Accepted `scheduled` /
+`rescheduled` actions can later record dispatch and final outcomes under their
+existing immutable identity. Final outcomes remain protected from replay.
+
+`action-service.ts` implements preparation and pure action lookup through narrow
+injected effects. `read-projections.ts` shares account, content, draft/schedule
+revision and media projections with the read API. Requests normalize through the
+existing URL/publishing helpers, then validate every explicit target separately.
+`account-binding.ts` freezes effective profile/base configuration and local
+session state privately; a base target never follows active-profile selection.
+Public snapshot revisions contain public identity/action data, not credentials.
+No provider authentication is claimed. Publication/rescheduling configuration,
+session, media or relevant draft/queue changes make preparatory actions conflicting.
+Cancellation instead binds the retained queue snapshot and cancellable state;
+missing credentials, session or media cannot prevent stopping failed/pending work.
+Its safe preview keeps unverified references without reading live media or sessions.
+Queue changes conflict even when public redaction hides them, while a live profile
+label change alone does not change the retained queue identity. Expiry is derived
+without updating the journal. `CROSSPOSTER_TIMEZONE` selects the IANA display zone
+(default `Europe/Berlin`); offset-bearing future instants are stored in UTC.
+
 Trace a failure through route response → publishing service → adapter result →
 history/storage, using synthetic input and intercepted IO. Capture the target/
 profile, error category and whether external completion was known; redact
@@ -106,15 +146,16 @@ warning text. [Runner](tests/app/publish-runner.test.ts) and
 The scheduler has one in-process running guard, a 30-second timer and sequential
 due-post processing. Any successful target removes the item, including partial
 success; all-failed/uncertain attempts remain failed for user review. There are
-no automatic retries, cross-process locks or exactly-once guarantees. The disable
+no automatic retries or exactly-once guarantees. Cross-process ownership applies
+only to control-enabled operation. The disable
 flag prevents starting a timer, not explicit ticks; collection GET still ticks.
 A due snapshot can dispatch a later entry another actor has rescheduled or
 already set publishing. JSON/media writes have no transaction/rollback guarantee.
 See [controlled interleavings](tests/app/scheduler.test.ts) before changing this.
 
-Other preserved disagreements include title-only Dribbble/Pinterest schedules
-accepted by request validation then dropped by storage (Hacker News survives),
-first-target limits for duplicate platforms, malformed JSON rejection order,
+Valid title-only Dribbble/Pinterest schedules now survive storage, including
+mixed selections of title-only platforms. Other preserved disagreements include
+first-target limits for duplicate platforms on legacy routes, malformed JSON rejection order,
 and original composer hydration/conversion completion ordering. The full table
 and regression links are in [characterization.md](tests/app/characterization.md).
 Calendar display uses browser-local days and UTC wire timestamps; test Berlin

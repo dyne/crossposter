@@ -10,9 +10,21 @@ import { readControlConfig, readControlMedia } from "./read-storage";
 const statuses: Partial<Record<ReturnType<typeof publicError>["code"], number>> = {
   validation_failed: 400, unauthorized: 401, forbidden: 403, instance_mismatch: 409,
   target_missing: 404, media_missing: 404, post_missing: 404,
+  action_missing: 404, schedule_missing: 404, revision_conflict: 409, ownership_conflict: 409,
+  idempotency_conflict: 409, action_conflict: 409,
   cursor_invalid: 400, cursor_stale: 409, storage_corrupt: 500, storage_unavailable: 503
 };
 const headers = { "cache-control": "no-store", "x-content-type-options": "nosniff" };
+
+export function controlSuccess(name: keyof typeof controlTools, data: unknown) {
+  const output = controlTools[name].outputSchema.safeParse({ ok: true, data });
+  if (!output.success) throw new ControlError("storage_corrupt");
+  return Response.json(output.data, { headers });
+}
+export function controlFailure(error: unknown) {
+  const failure = publicError(error);
+  return Response.json({ ok: false, error: failure }, { status: statuses[failure.code] ?? 500, headers });
+}
 
 // Routes choose one fixed operation. No client-controlled URL/method dispatch.
 export async function controlRead(request: Request, name: ReadToolName, params: Record<string, string> = {}) {
@@ -39,11 +51,8 @@ export async function controlRead(request: Request, name: ReadToolName, params: 
       environmentValue: (field) => process.env[field]
     });
     const data = await service.read(name, parsed.data);
-    const output = spec.outputSchema.safeParse({ ok: true, data });
-    if (!output.success) throw new ControlError("storage_corrupt");
-    return Response.json(output.data, { headers });
+    return controlSuccess(name, data);
   } catch (error) {
-    const failure = publicError(error);
-    return Response.json({ ok: false, error: failure }, { status: statuses[failure.code] ?? 500, headers });
+    return controlFailure(error);
   }
 }

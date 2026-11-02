@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { NextResponse } from "next/server";
 import { dataPath } from "@/lib/runtime-paths";
+import { assertCurrentBackendMutation } from "@/lib/control/backend-mutation";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -110,6 +111,7 @@ async function findFfmpeg(): Promise<string> {
 }
 
 function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
+  assertCurrentBackendMutation();
   return new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, args, {
       stdio: ["ignore", "ignore", "pipe"]
@@ -144,6 +146,7 @@ function runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
 
 async function removeFile(filePath: string) {
   try {
+    assertCurrentBackendMutation();
     await unlink(filePath);
   } catch {}
 }
@@ -154,6 +157,7 @@ export async function POST(request: Request) {
   let outputPath = "";
 
   try {
+    assertCurrentBackendMutation();
     const formData = await request.formData();
     const file = formData.get("file");
 
@@ -176,12 +180,14 @@ export async function POST(request: Request) {
     const targetSize = parseTargetBytes(formData.get("targetBytes"));
     const profiles = parseQuality(formData.get("quality"));
 
+    assertCurrentBackendMutation();
     await mkdir(tempDir, { recursive: true });
 
     const filename = cleanFilename(file.name);
     inputPath = path.join(tempDir, `${tempId}${extensionFromFilename(filename)}`);
     outputPath = path.join(tempDir, `${tempId}-compressed.mp4`);
 
+    assertCurrentBackendMutation();
     await pipeline(
       Readable.fromWeb(file.stream() as unknown as Parameters<typeof Readable.fromWeb>[0]),
       createWriteStream(inputPath)

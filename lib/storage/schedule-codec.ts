@@ -23,7 +23,9 @@ export function normalizeScheduledPost(value: unknown, defaults: NormalizationDe
   const scheduledAt = Date.parse(scheduledFor);
   const title = stringValue(record.title, 300);
   const text = stringValue(record.text, storedPostTextLimit);
-  const isHackerNewsOnly = platforms.length === 1 && platforms[0] === "hackernews";
+  const titleOnly = (platforms.length === 1 && platforms[0] === "hackernews") ||
+    (platforms.some((platform) => platform === "dribbble" || platform === "pinterest") && platforms.every((platform) =>
+      platform === "hackernews" || platform === "dribbble" || platform === "pinterest"));
   const media = normalizePublishedMedia(record.media);
   const results = Array.isArray(record.results)
     ? record.results.map(normalizePublishResult).filter((item): item is PublishResult => Boolean(item))
@@ -31,7 +33,7 @@ export function normalizeScheduledPost(value: unknown, defaults: NormalizationDe
 
   if (
     !Number.isFinite(scheduledAt) ||
-    (!text.trim() && !(isHackerNewsOnly && title.trim())) ||
+    (!text.trim() && !(titleOnly && title.trim())) ||
     platforms.length === 0
   ) {
     return null;

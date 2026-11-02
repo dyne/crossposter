@@ -58,7 +58,7 @@ describe("configuration facade disk behavior", () => {
     const before = readFileSync(config.localConfigPath, "utf8");
     expect(() => config.updateScheduledPost("fixture-schedule", () => { throw new Error("callback failure"); })).toThrow("callback failure");
     expect(readFileSync(config.localConfigPath, "utf8")).toBe(before);
-    const invalid = scheduledPost({ id: "invalid", text: "", platforms: ["pinterest"], title: "title" });
+    const invalid = scheduledPost({ id: "invalid", text: "", platforms: ["bluesky"], title: "title" });
     expect(config.upsertScheduledPost(invalid)).toEqual(invalid);
     expect(config.getScheduledPosts().map(post => post.id)).toEqual(["fixture-schedule"]);
   });

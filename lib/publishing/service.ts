@@ -1,6 +1,6 @@
 import "server-only";
 import { postLimitIssuesForTargets, titleLimitIssues } from "@/lib/platform-limits";
-import { defaultTargets, targetLimitInput, type ConfigValueLookup } from "./contracts";
+import { defaultTargets, normalizePublishContent, targetLimitInput, type ConfigValueLookup } from "./contracts";
 import type { ProviderRegistry } from "./provider";
 import type {
   Platform,
@@ -30,6 +30,7 @@ export type PublishDependencies = {
   appendPublishedPost: (post: PublishedPost) => PublishedPost | undefined;
   now: () => Date;
   createId: () => string;
+  assertCanPublish?: () => void;
 };
 
 function publishedMediaFromContext(media: ProviderContext["media"]): PublishedMedia | undefined {
@@ -49,6 +50,7 @@ function publishedMediaFromContext(media: ProviderContext["media"]): PublishedMe
 
 export function createPublishService(dependencies: PublishDependencies) {
   return async function runPublish(input: PublishRunInput): Promise<PublishRunResult> {
+    dependencies.assertCanPublish?.();
     const targets = defaultTargets(input);
     const platforms = Array.from(new Set(targets.map((target) => target.platform)));
     const limitIssues = [
@@ -69,9 +71,7 @@ export function createPublishService(dependencies: PublishDependencies) {
     }
 
     const ctx: ProviderContext = {
-      title: input.title?.trim() || undefined,
-      text: input.text.trim(),
-      linkUrl: input.linkUrl?.trim() || undefined,
+      ...normalizePublishContent(input),
       mediaId: input.mediaId || undefined,
       mediaUrl: input.mediaUrl || undefined,
       media,
@@ -101,6 +101,7 @@ export function createPublishService(dependencies: PublishDependencies) {
           };
         }
 
+        dependencies.assertCanPublish?.();
         try {
           const result = await dependencies.providers[target.platform](targetCtx);
 

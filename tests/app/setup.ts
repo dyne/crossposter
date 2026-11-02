@@ -16,14 +16,21 @@ function blocked(boundary: string) {
   return vi.fn(function () { return denyIO(boundary); });
 }
 
+const fixtureDescriptors = new Set<number>();
 function guardFilesystem<T extends object>(original: T, names: string[]): T {
   const guarded = { ...original };
   for (const name of names) {
     const operation = Reflect.get(original, name);
     if (typeof operation !== "function") throw new Error(`Missing filesystem API: ${name}`);
     Reflect.set(guarded, name, (...args: unknown[]) => {
-      assertFixturePath(args[0]);
-      return Reflect.apply(operation, original, args);
+      if (typeof args[0] === "number") {
+        if (!fixtureDescriptors.has(args[0])) return denyIO("filesystem descriptor outside sandbox");
+      } else assertFixturePath(args[0]);
+      if (["linkSync", "renameSync"].includes(name)) assertFixturePath(args[1]);
+      const result = Reflect.apply(operation, original, args);
+      if (name === "openSync") fixtureDescriptors.add(result);
+      if (name === "closeSync") fixtureDescriptors.delete(args[0] as number);
+      return result;
     });
   }
   return guarded;
@@ -31,7 +38,8 @@ function guardFilesystem<T extends object>(original: T, names: string[]): T {
 
 const guardedFs = guardFilesystem(fs, [
   "existsSync", "readFileSync", "writeFileSync", "mkdirSync", "readdirSync",
-  "rmSync", "unlinkSync", "statSync", "accessSync", "createReadStream", "createWriteStream"
+  "rmSync", "unlinkSync", "statSync", "accessSync", "createReadStream", "createWriteStream",
+  "openSync", "closeSync", "fsyncSync", "linkSync", "renameSync", "rmdirSync", "lstatSync", "realpathSync", "readlinkSync"
 ]);
 const guardedPromises = guardFilesystem(fsPromises, [
   "access", "mkdir", "readFile", "readdir", "rm", "stat", "unlink", "writeFile", "open"

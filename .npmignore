@@ -3,3 +3,9 @@
 tests/
 .poster-control.json
 **/.poster-control.json
+.poster-owner*
+**/.poster-owner*
+.poster-actions*
+**/.poster-actions*
+poster.config.local.json.*.tmp
+**/poster.config.local.json.*.tmp

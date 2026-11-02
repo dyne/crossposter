@@ -73,7 +73,7 @@ function chromeRoot(): string {
   return path.join(os.homedir(), "Library", "Application Support", "Google", "Chrome");
 }
 
-function chromeCookieDbCandidates(profileName?: string): Array<{ dbPath: string; profileLabel: string }> {
+export function chromeCookieDbCandidates(profileName?: string): Array<{ dbPath: string; profileLabel: string }> {
   if (process.platform !== "darwin") {
     throw new Error("Chrome cookie import is currently supported only on macOS.");
   }

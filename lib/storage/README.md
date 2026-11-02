@@ -14,6 +14,10 @@ store receives JSON IO, defaults and environment lookup. It keeps active profile
 local value, environment and field-default precedence, including the existing
 exclusion of local/environment credentials for explicitly selected profiles.
 
+The deliberate schedule-codec exception is valid title-only Dribbble/Pinterest
+content, which now survives round trips (including mixed title-only targets).
+Other legacy coercion, selection and fallback behavior remains unchanged.
+
 `media-service.ts` keeps upload validation, filename/MIME handling and best-effort
 image dimensions. Its media adapter handles bytes and metadata files under
 `.poster-uploads`. Metadata has the existing shape and filename; lookup derives
@@ -21,6 +25,60 @@ the current path from the metadata ID and obtains the size from the actual file.
 Stored paths, kinds and sizes are not treated as authoritative during lookup.
 
 ## Existing consistency and error limits
+
+### Control-enabled ownership and durability
+
+An explicit `.poster-control.json` opts the canonical data root into backend
+ownership. A complete fsynced private claim is linked exclusively at
+`.poster-owner.json`. Every supported production config write, media mutation,
+publish dispatch and scheduler mutation checks ownership and readable config /
+action storage before effects; optional dashboard paths use these same guards.
+Legacy config reads also fail closed while opted in. Invalid, unreadable or
+symlink setup is an error, and removing setup while an owner or journal remains
+does not restore legacy writes. The pure control GET routes create no files.
+
+One process shares its cached claim across route bundles, but verifies the
+on-disk random token and file identity every time. Missing/replaced claims are
+errors, never implicit reacquisition. Explicit release is for a quiescent backend;
+normal process exit releases its own claim. Abrupt termination leaves a stale
+claim. Recovery probes its PID with signal zero, rechecks the claim under a
+recovery gate, and reclaims only `ESRCH` (confirmed absent). Every live PID,
+including a reused PID, is refused. The backend never kills the recorded process.
+Malformed claims, unknown liveness and an abandoned recovery gate fail closed;
+offline owner inspection is required rather than guessing which files to remove.
+
+`.poster-actions.json` is a strict version-1 journal with immutable payload
+digests, request keys, private account bindings, action revisions and retained
+terminal records including post/schedule IDs. An initialization marker is flushed
+before the first action, so a missing initialized journal is corruption across
+restart. Reads never repair, expire or initialize records. Writes use mode 0600,
+file flush, atomic rename and directory flush; existing config uses the same
+replacement sequence while control is enabled. Unsupported flush or any IO
+failure is surfaced, without a weaker durability fallback. A failure after rename
+can leave complete new bytes visible; callers reread on retry and never infer
+rollback. Temporary leftovers grant no execution or replay authority. Corruption
+and unreadable state cannot be replaced with default-empty configuration/queue
+data. This protects cooperating local backends on the same filesystem; it is
+not a transaction with a provider or a sandbox against the operating-system owner.
+
+Readers and durable writers share a 64 MiB JSON ceiling. Writers count the exact
+serialized UTF-8 bytes, including the trailing newline, before opening a temporary
+file or replacing prior state. The next action journal is checked before first
+initialization writes as well. Oversized output returns `storage_unavailable`,
+preserves the previous readable records/configuration, and never prunes history
+to fit. Focused tests inject smaller limits into the same reader/writer paths.
+
+`scheduled` and `rescheduled` mean accepted future work, not final publication.
+Persistence supports `prepared → approved → executing → scheduled/rescheduled`,
+then `executing` with per-target dispatch/result updates and a final outcome under
+the same action identity. The accepted schedule remains authorized after the
+preparation deadline; reaching its saved time does not require a new preparation.
+Payload, request key, account bindings and saved times stay immutable, and an
+assigned schedule/post ID cannot be replaced. Final outcomes cannot transition
+back to execution. These are internal persistence rules; approval authority,
+queue acceptance and dispatch remain separate use cases.
+
+### Legacy operation without control setup
 
 - Configuration uses synchronous, direct reads and writes of
   `poster.config.local.json`. Each ordinary read/modify/write completes without
