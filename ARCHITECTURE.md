@@ -227,8 +227,20 @@ per-target hooks. Each hook revalidates identity/media/ownership, flushes intent
 then invokes the existing provider with an exact scoped base/profile config.
 Base never follows the active profile; scoped missing values cannot fall back.
 Results and safe URLs are flushed before the next target. Raw provider details
-never enter the action journal or its compatible history. Scheduling modes remain
-gated until their separate implementation.
+never enter the action journal or its compatible history.
+`queue-service.ts` commits approved schedule/reschedule/cancel actions using a
+durable queue intent, a deterministic schedule ID and an immutable authorization
+binding on the queue item. A retry reconciles an already-written queue entry
+before replacing anything. Untouched intents revalidate approval, future time
+and dependencies before applying; already accepted entries retain authorization
+beyond the preparation deadline. Pure reads explain unapplied expired intents
+without changing files; owned recovery persists their expired state. Changed
+queue bytes conflict, while exact accepted replacements finalize beyond expiry.
+Reschedule binds the private retained queue
+snapshot as well as its public revision. Cancellation never reads live account
+or media readiness and only removes the local queue entry. Scheduled dispatch
+uses the same per-target approved publisher and checks frozen account/media
+bindings; later edits to the singleton draft cannot change an accepted job.
 An approved dispatch that throws without a definitive returned result is uncertain,
 including untagged transport/response-body errors and non-Error rejections: remote
 acceptance may already have happened. Explicit unsuccessful results stay failed.
@@ -271,14 +283,32 @@ the control journal additionally retains dispatch evidence. [Runner](tests/app/p
 [route](tests/app/publish-route.test.ts) tests distinguish those boundaries.
 
 The scheduler has one in-process running guard, a 30-second timer and sequential
-due-post processing. Any successful target removes the item, including partial
-success; all-failed/uncertain attempts remain failed for user review. There are
-no automatic retries or exactly-once guarantees. Cross-process ownership applies
-only to control-enabled operation. The disable
-flag prevents starting a timer, not explicit ticks; collection GET still ticks.
-A due snapshot can dispatch a later entry another actor has rescheduled or
-already set publishing. JSON/media writes have no transaction/rollback guarantee.
-See [controlled interleavings](tests/app/scheduler.test.ts) before changing this.
+due-post processing. Recovery runs inside that guard. Each claim rechecks the
+current scheduled state, due time and complete queue revision; stale publishing
+or rescheduled snapshots do not dispatch. Results are saved before queue removal,
+and successful/partial items leave only with retained history or an authoritative
+approved-action record. Failed/uncertain targets never retry automatically.
+Interrupted approved dispatch uses the per-target journal: known results survive,
+dispatching intent becomes uncertain, and never-dispatched targets stay distinct.
+Orphaned legacy publishing entries become failed with conservatively matched
+results. Overdue entries never claimed remain eligible for catch-up. Post reads
+also use scheduled action IDs when compatible history is unavailable.
+There is no external exactly-once guarantee. Cross-process ownership applies
+only to control-enabled operation. The disable flag prevents starting a timer,
+not explicit ticks; collection GET still ticks. JSON/media writes have no
+transaction/rollback guarantee with a provider. See the controlled interleavings
+in [scheduler tests](tests/app/scheduler.test.ts).
+
+The incumbent launcher starts scheduling without a dashboard request: its
+five-second warmup and thirty-second pings reach the backend tick, which starts
+the shared thirty-second backend timer. Build first, then run a separate
+persistent loopback process with
+`CROSSPOSTER_RUN_MODE=production node bin/crossposter.mjs --host 127.0.0.1 --no-open --no-update --data-dir /absolute/data`.
+Client attachment/disconnection does not own that process. No service installation
+is implicit. `POSTER_DISABLE_SCHEDULER=true`, from the environment or data `.env`,
+stops automatic launcher and backend ticks; an explicit tick remains available.
+SIGTERM/SIGINT stop the backend timer while tracked execution settles. Restart
+uses the same durable root claim and conservative queue recovery.
 
 Valid title-only Dribbble/Pinterest schedules now survive storage, including
 mixed selections of title-only platforms. Other preserved disagreements include

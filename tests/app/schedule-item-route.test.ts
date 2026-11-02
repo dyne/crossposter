@@ -7,6 +7,11 @@ const now = "2026-01-15T12:00:00.000Z";
 const future = "2026-01-16T12:00:00.000Z";
 const context = (id = "fixture-schedule") => ({ params: Promise.resolve({ id }) });
 const patchRequest = (body: unknown) => jsonRequest(body, "/api/scheduled/fixture-schedule");
+async function within<T>(operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([operation, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Controlled operation did not settle")), 1000); })]); }
+  finally { clearTimeout(timer); }
+}
 
 beforeEach(() => {
   freezeClock();
@@ -14,6 +19,24 @@ beforeEach(() => {
 });
 
 describe("scheduled item routes", () => {
+  it("rejects a reschedule body which finishes after a tick claims the item, then settles both publishers", async () => {
+    await saveConfig({ scheduledPosts: [scheduledPost({ scheduledFor: now })] }); const providers = await successfulProviders();
+    let releaseBody!: () => void; let releaseProvider!: () => void; let enteredBody!: () => void; let enteredProvider!: () => void;
+    const bodyHeld = new Promise<void>((resolve) => { releaseBody = resolve; }); const providerHeld = new Promise<void>((resolve) => { releaseProvider = resolve; });
+    const bodyEntered = new Promise<void>((resolve) => { enteredBody = resolve; }); const providerEntered = new Promise<void>((resolve) => { enteredProvider = resolve; });
+    const request = patchRequest({ scheduledFor: future }); vi.spyOn(request, "json").mockImplementation(async () => { enteredBody(); await bodyHeld; return { scheduledFor: future }; });
+    vi.mocked(providers.bluesky).mockImplementation(async () => { enteredProvider(); await providerHeld; return { platform: "bluesky", ok: true, message: "Fixture" }; });
+    const route = await import("@/app/api/scheduled/[id]/route"); const { runScheduledTick } = await import("@/lib/scheduler");
+    const patch = route.PATCH(request, context()); let tick: Promise<unknown> | undefined;
+    try {
+      await vi.waitFor(() => expect(vi.mocked(request.json)).toHaveBeenCalledOnce(), { timeout: 500 }); await bodyEntered;
+      tick = runScheduledTick(); await vi.waitFor(() => expect(providers.bluesky).toHaveBeenCalledOnce(), { timeout: 500 }); await providerEntered;
+      releaseBody(); expect((await within(patch)).status).toBe(400);
+      expect((await route.DELETE(new Request("http://localhost/api/scheduled/fixture-schedule", { method: "DELETE" }), context())).status).toBe(400);
+      releaseProvider(); expect(await within(tick)).toEqual({ processed: 1, skipped: false });
+    } finally { releaseBody(); releaseProvider(); await within(Promise.allSettled([patch, ...(tick ? [tick] : [])])); }
+  });
+
   it.each(["PATCH", "DELETE"] as const)("returns 404 for missing %s entries before parsing the body", async (method) => {
     const route = await import("@/app/api/scheduled/[id]/route");
     const response = await route[method](new Request("http://localhost/api/scheduled/missing", { method, body: "{" }), context("missing"));

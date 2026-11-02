@@ -56,7 +56,10 @@ function help() {
 
 Usage:
   npx ${packageName}@latest
-  crossposter [--port 2004] [--data-dir .] [--no-open] [--no-update]
+  crossposter [--port 2004] [--host 127.0.0.1] [--data-dir .] [--no-open] [--no-update]
+
+Persistent local backend (build first):
+  CROSSPOSTER_RUN_MODE=production crossposter --host 127.0.0.1 --no-open --no-update
 
 Commands:
   crossposter --version
@@ -408,15 +411,16 @@ async function main() {
     } catch {}
   }
 
-  const schedulerWarmup = setTimeout(() => {
+  const schedulerDisabled = (process.env.POSTER_DISABLE_SCHEDULER ?? dotEnvValues.POSTER_DISABLE_SCHEDULER) === "true";
+  const schedulerWarmup = schedulerDisabled ? undefined : setTimeout(() => {
     void pingScheduler();
   }, 5000);
-  const schedulerInterval = setInterval(() => {
+  const schedulerInterval = schedulerDisabled ? undefined : setInterval(() => {
     void pingScheduler();
   }, 30000);
 
-  schedulerWarmup.unref?.();
-  schedulerInterval.unref?.();
+  schedulerWarmup?.unref?.();
+  schedulerInterval?.unref?.();
 
   function stopChild(signal) {
     child.kill(signal);

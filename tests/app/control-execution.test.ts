@@ -73,7 +73,7 @@ describe("approved execution claims", () => {
     else await f.approve(action);
     if (kind === "expired") vi.setSystemTime(new Date(action.expiresAt));
     if (kind === "changed") { f.config.values.BLUESKY_APP_PASSWORD = "replacement-secret"; fs.writeFileSync(f.filename, JSON.stringify(f.config)); }
-    await expect(service.commit(f.commit(action))).rejects.toMatchObject({ code: ({ rejected: "approval_rejected", expired: "approval_expired", changed: "action_conflict", unsupported: "validation_failed" })[kind] });
+    await expect(service.commit(f.commit(action))).rejects.toMatchObject({ code: ({ rejected: "approval_rejected", expired: "approval_expired", changed: "action_conflict", unsupported: "backend_unavailable" })[kind] });
     expect(run).not.toHaveBeenCalled(); expect(f.current(action.id).action.state).not.toBe("executing");
   });
   it("authenticates the production commit seam and rejects replacement arguments before execution", async () => {

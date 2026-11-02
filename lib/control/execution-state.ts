@@ -16,5 +16,8 @@ export function interruptedAction(action: StoredAction): StoredAction {
   return { ...view, revision: actionRevision(view) };
 }
 export function executionView(root: string, action: StoredAction) {
-  return action.state === "executing" && !executionBackends.get(root)?.service.has(action.id) ? interruptedAction(action) : action;
+  // Queue intent is reconciled against the retained queue by commit, rather
+  // than interpreted as a provider dispatch interrupted by process death.
+  return action.state === "executing" && (action.payload.mode === "publish" || action.postId !== null)
+    && !executionBackends.get(root)?.service.has(action.id) ? interruptedAction(action) : action;
 }

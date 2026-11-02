@@ -10,6 +10,7 @@ import { actionRevision, type ActionRecord, type StoredAction } from "./action-s
 import { projectControlConfig, projectControlDraft, projectControlMedia, projectControlSchedule } from "./read-projections";
 import type { ControlReadConfig, QueuedPost } from "./read-storage";
 import { ownerDecisionInputSchema } from "./approval-contracts";
+import { queueIntentView } from "./queue-service";
 
 type Input = z.infer<typeof prepareActionInputSchema>;
 type PublicationInput = Exclude<Input, { mode: "cancel" }>;
@@ -57,6 +58,7 @@ type PreparationSnapshot = {
   content: ControlContent; targets: StoredAction["outcomes"][number]["target"][];
   media: ControlMedia | null; draftRevision: string | null; bindings: ActionRecord["accountBindings"];
   scheduledFor?: string; timezone: string; local: string | null; warnings: string[]; now: Date;
+  scheduleBinding?: string;
 };
 
 export function createActionService(deps: ActionDependencies) {
@@ -80,7 +82,7 @@ export function createActionService(deps: ActionDependencies) {
     const { post, schedule } = retainedSchedule(config, input.scheduleId, input.expectedRevision);
     const rawContent = { title: post.title ?? "", text: post.text ?? "", linkUrl: post.linkUrl || post.url || "", mediaId: post.media?.id ?? null };
     return { dto, content: normalizeControlContent(rawContent), ids: schedule.targets.map((target) => target.id), scheduleRevision: schedule.revision,
-      scheduledFor: schedule.scheduledFor };
+      scheduledFor: schedule.scheduledFor, queueBinding: payloadDigest(post) };
   }
   function relevantDraft(config: ControlReadConfig, content: ControlContent, ids: string[], mediaDigest: string | null) {
     const dto = projectControlConfig(config, deps.environmentValue);
@@ -125,7 +127,8 @@ export function createActionService(deps: ActionDependencies) {
       warnings: snapshot.warnings, outcomes: snapshot.targets.map((target) => ({ target, state: "not_dispatched", message: "No execution has been authorized or dispatched.", url: null })), postId: null,
       scheduleId: input.mode === "reschedule" || input.mode === "cancel" ? input.scheduleId : null };
     action.revision = actionRevision(action);
-    const saved = deps.saveRecord({ requestKey: input.requestKey, inputDigest, action, accountBindings: snapshot.bindings });
+    const saved = deps.saveRecord({ requestKey: input.requestKey, inputDigest, action, accountBindings: snapshot.bindings,
+      ...(snapshot.scheduleBinding ? { scheduleBinding: snapshot.scheduleBinding } : {}) });
     return safeView(saved, config, expired(saved.action) ? "expired" : saved.action.state);
   }
   function prepareCancellation(input: Extract<Input, { mode: "cancel" }>, inputDigest: string): StoredAction {
@@ -151,6 +154,10 @@ export function createActionService(deps: ActionDependencies) {
     const result = (current: ControlReadConfig, state = action.state, assertUnchanged = () => deps.readConfig()) => ({
       action: safeView(record, current, state), assertUnchanged
     });
+    if (record.queueIntent && action.state === "executing" && action.postId === null) {
+      const view = queueIntentView(record, config, deps.now());
+      if (!execution || view.state !== "executing") return { action: safeView({ ...record, action: view }, config), assertUnchanged: () => deps.readConfig() };
+    }
     if (expired(action)) return result(config, "expired");
     if (!preparatory.has(action.state) && !execution) {
       const view = deps.executionView?.(action) ?? action;
@@ -199,12 +206,14 @@ export function createActionService(deps: ActionDependencies) {
           if (!unchangedBindings(again.bindings, ids)
             || (mediaId && deps.mediaRevision(mediaId) !== before)
             || payloadDigest(media ? projectControlMedia(media, projectControlConfig(latest, deps.environmentValue)) : null) !== payloadDigest(action.payload.media)) throw new ControlError("action_conflict");
-          if (action.payload.draftRevision !== null && relevantDraft(latest, action.payload.content, action.payload.targets.map((target) => target.id), media?.digest ?? null) !== action.payload.draftRevision) throw new ControlError("action_conflict");
-          if (action.payload.mode === "reschedule") {
+          const acceptedQueue = record.queueIntent && (action.state === "scheduled" || action.state === "rescheduled" || action.postId !== null);
+          if (!acceptedQueue && action.payload.draftRevision !== null && relevantDraft(latest, action.payload.content, action.payload.targets.map((target) => target.id), media?.digest ?? null) !== action.payload.draftRevision) throw new ControlError("action_conflict");
+          if (action.payload.mode === "reschedule" && !acceptedQueue) {
             const payload = action.payload;
             const post = latest.scheduledPosts.find((item) => item.id === payload.scheduleId);
             if (!post || !["scheduled", "failed"].includes(post.status)
-              || projectControlSchedule(post, projectControlConfig(latest, deps.environmentValue)).revision !== action.payload.expectedRevision) throw new ControlError("action_conflict");
+              || projectControlSchedule(post, projectControlConfig(latest, deps.environmentValue)).revision !== action.payload.expectedRevision
+              || payloadDigest(post) !== record.scheduleBinding) throw new ControlError("action_conflict");
           }
           safeView(record, latest); return latest;
         } catch (error) {
@@ -290,12 +299,14 @@ export function createActionService(deps: ActionDependencies) {
       const latest = deps.readConfig(); const current = source(latest, input); const latestAccounts = selected(latest, current.ids);
       if (payloadDigest(accounts.bindings) !== payloadDigest(latestAccounts.bindings)
         || payloadDigest(current.content) !== payloadDigest(initial.content) || payloadDigest(current.ids) !== payloadDigest(initial.ids)
+        || ("queueBinding" in initial && initial.queueBinding !== ("queueBinding" in current ? current.queueBinding : null))
         || (mediaId && deps.mediaRevision(mediaId) !== before) || deps.timezone() !== timezone
         || (draftRevision !== null && relevantDraft(latest, initial.content, initial.ids, media?.digest ?? null) !== draftRevision)) throw new ControlError("action_conflict");
       const now = deps.now();
       if ((input.mode === "schedule" || input.mode === "reschedule") && Date.parse(instant!) <= now.getTime()) throw new ControlError("validation_failed");
       const identities = accounts.resolved.map(({ target }) => ({ id: target.id, platform: target.platform, profileId: target.profileId, label: target.label }));
       return persist(input, inputDigest, latest, { content: initial.content, targets: identities, media: media ? projectControlMedia(media, current.dto) : null,
+        ...("queueBinding" in initial ? { scheduleBinding: initial.queueBinding } : {}),
         draftRevision, bindings: accounts.bindings, scheduledFor: instant, timezone, local, now,
         warnings: ["Provider authentication and account identity are not independently verified. Approval binds the selected configuration and local session snapshot."] });
     }

@@ -91,6 +91,9 @@ export type ScheduledPost = {
   results?: PublishResult[];
   publishedPostId?: string;
   publishedAt?: string;
+  // Points to the immutable, independently approved control action. A queue
+  // entry carrying this binding must never use the legacy publication path.
+  authorization?: { actionId: string; payloadDigest: string };
 };
 
 export type ProviderContext = PublishPayload & {

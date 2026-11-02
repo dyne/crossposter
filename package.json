@@ -46,7 +46,7 @@
     "test:coverage": "vitest run --coverage",
     "test:boundaries": "node --test tests/architecture/import-boundaries.test.mjs",
     "test:e2e": "playwright test",
-    "test:control-runtime": "node --test tests/control-runtime.test.mjs tests/control-owner-process.test.mjs tests/control-approval-runtime.test.mjs tests/control-execution-process.test.mjs tests/control-publication-runtime.test.mjs",
+    "test:control-runtime": "node --test tests/control-runtime.test.mjs tests/control-owner-process.test.mjs tests/control-approval-runtime.test.mjs tests/control-execution-process.test.mjs tests/control-publication-runtime.test.mjs tests/control-scheduler-runtime.test.mjs",
     "test:browser-verification": "python3 -B -m unittest discover -s tests -p 'test_*.py'"
   },
   "dependencies": {

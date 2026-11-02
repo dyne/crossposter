@@ -22,53 +22,60 @@ time first; item lookup also sees hidden statuses so the existing mutation
 rejections remain intact. Collection GET still awaits a tick before returning
 the list. PATCH clears errors/results when rescheduling, retaining attempts and
 history linkage; PATCH/DELETE continue to reject publishing/published entries.
+PATCH also rechecks the current queue revision after reading its request body,
+so a concurrently claimed, removed or changed entry cannot be overwritten.
 
 A tick snapshots due `scheduled` records once, oldest scheduled time first.
 Each attempt reads the latest record through the synchronous update operation.
-Missing records and records that no longer return `publishing` are skipped.
-The explicit claim result distinguishes a transition to `publishing` from a
-record already in that state. For compatibility, both results still dispatch.
-The current claim does not check the scheduled time again.
+The claim requires the current record to remain `scheduled`, due at the current
+clock and identical to that snapshot's complete internal revision. Missing,
+publishing, changed or newly future records are skipped. The running guard
+covers recovery as well as dispatch, including timer/ping overlap.
 
-Any successful target removes the record, including partial success with other
-failed or uncertain targets. With no success, the record becomes `failed`,
-attempts increments once and results/history ID are retained when available.
-Unknown outcomes carry the existing warning to check the account before
-rescheduling. There are no automatic retries. The storage codec still drops
-the persisted `uncertain` flag while preserving the warning text.
+Every returned result is saved in the queue before removal. An item with a
+successful target leaves only when the publisher returns a retained history
+record, including the approved action-backed equivalent. Otherwise it stays
+failed with complete results. Partial and uncertain target outcomes remain
+inspectable in history or the action journal after removal/restart. There are
+no automatic retries of successful, failed or uncertain dispatched targets.
+The storage codec preserves explicit uncertainty.
 
-Publisher errors become failed attempts. Removal or result-write errors enter
-the same failure handler; if that failure write also throws, the tick rejects
-and later due records are not processed. Listing/claim errors also reject.
+Publisher errors become failed attempts. Removal or result-write errors retain
+returned results in the fallback failure write, without counting the same
+attempt twice. If that write also throws, the tick rejects and later due records
+are not processed. Listing/claim errors also reject.
 The shared running flag is always released in `finally`. Storage failures after
 a successful external publish cannot roll back that publish.
 
-## Existing claim and consistency limits
+## Approved dispatch and recovery
 
-The process guard prevents overlapping ticks that share the same state. It is
-not a cross-process lock, and the JSON update supplies no ownership token or
-exactly-once delivery guarantee. A due snapshot can become stale while the tick
-awaits an earlier publisher:
+Approved queue entries carry their immutable action ID/digest. They use the
+existing approved publisher's sequential per-target intent/result journal and
+strict explicit-profile configuration; they never fall back to legacy publish.
+The data-root owner protects control-enabled writes. Each provider call still
+rechecks account/media/queue identity after its final await. A later draft edit
+cannot change an accepted job, and its approval deadline does not expire it.
 
-- If another actor sets a later due entry to `publishing`, the unchanged entry
-  is returned and this tick also dispatches it. A separate actor may already
-  have dispatched the same post.
-- If another actor reschedules a later entry into the future while leaving it
-  `scheduled`, this tick still transitions and dispatches it from its snapshot.
-- Removal or a change to `failed` skips that entry.
+Recovery never starts a provider. Interrupted dispatching intent becomes
+uncertain; known results and never-dispatched targets retain their distinction.
+A queue claim which stopped before any action/provider claim becomes failed
+without resumption. Complete terminal journal results are reconciled into the
+queue before local cleanup, even if history writing failed. Control post reads
+also expose scheduled action post IDs directly from the journal.
 
-`tests/app/scheduler.test.ts` reproduces all four interleavings with a held first
-publisher, a bounded wait, explicit state preconditions, and release/settlement
-in `finally`. These cases passed against the scheduler before extraction.
-They document existing behavior; distributed coordination and changed claim
-eligibility require a separate behavior decision. Injected-service tests in
-`scheduling-service.test.ts` also reproduce duplicate dispatch with two independent
-running guards sharing a store: the first tick holds its earlier publisher, the
-second tick claims the later entry and holds its publisher, then the first tick
-resumes and dispatches that already-publishing entry too. This models independent
-process guards; it does not establish filesystem transaction guarantees. Both
-held operations are released and settled, with zero in-flight publishers left.
-The same suite covers failure boundaries without account IO.
+Without an action journal, orphaned legacy `publishing` entries become failed;
+only uniquely matched known results remain definitive and missing/ambiguous
+results become uncertain. Overdue `scheduled` entries which never claimed work
+remain eligible for catch-up. Missing/corrupt control journals fail closed before
+queue claims. The process guard and local journal provide no external
+exactly-once guarantee or transaction with a provider.
+
+`scheduler.test.ts` and `scheduling-service.test.ts` now reject the original
+duplicate-publishing and stale-time reproductions. Held publishers prove current
+status/time/revision checks with one or independent guards; every gate is released
+and settled in `finally`. `control-scheduling.test.ts` covers retained journal
+boundaries, partial/uncertain outcomes, history failure, pure post reads,
+overdue catch-up and interrupted recovery using fake providers and real files.
 
 `scheduler-lifecycle.test.ts` exercises fake-timer startup, hot reload, disable
 semantics, overlap, failure reentry and cleanup. `schedule-item-route.test.ts`

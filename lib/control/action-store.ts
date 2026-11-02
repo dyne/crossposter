@@ -18,7 +18,10 @@ const recordSchema = z.strictObject({
     decision: z.enum(["approve", "reject"]), decidedAt: timestampSchema }).optional(),
   // Backend-private publication configuration/session bindings, or the retained
   // queue snapshot for cancellation. Never returned by routes.
-  accountBindings: z.record(z.string(), digestSchema)
+  accountBindings: z.record(z.string(), digestSchema),
+  scheduleBinding: digestSchema.optional(),
+  queueIntent: z.strictObject({ beforeDigest: digestSchema.nullable(), createdAt: timestampSchema,
+    updatedAt: timestampSchema, attempts: z.number().int().nonnegative(), publishedPostId: idSchema.optional(), supersedes: idSchema.optional() }).optional()
 });
 const journalSchema = z.strictObject({ version: z.literal(1), records: z.array(recordSchema) });
 export type ActionRecord = z.infer<typeof recordSchema>;
@@ -30,7 +33,7 @@ const anchorFilename = ".poster-actions.anchor.json";
 const transitions: Partial<Record<StoredAction["state"], readonly StoredAction["state"][]>> = {
   prepared: ["approved", "rejected", "expired", "conflicting"],
   approved: ["executing", "expired", "conflicting"],
-  executing: ["executing", "scheduled", "rescheduled", "canceled", "succeeded", "partial", "failed", "uncertain"],
+  executing: ["executing", "scheduled", "rescheduled", "canceled", "expired", "conflicting", "succeeded", "partial", "failed", "uncertain"],
   scheduled: ["executing", "canceled", "conflicting"],
   rescheduled: ["executing", "canceled", "conflicting"]
 };
@@ -63,6 +66,8 @@ function parseJournal(value: unknown) {
       || (ownerDecision.decision === "approve" && action.state === "rejected"))) throw new ControlError("storage_corrupt");
     if (!["prepared", "expired", "conflicting"].includes(action.state) && !ownerDecision) throw new ControlError("storage_corrupt");
   }
+  if (records.some((record) => record.queueIntent && (record.action.payload.mode === "publish" || !record.ownerDecision
+    || !["executing", "scheduled", "rescheduled", "canceled", "expired", "conflicting", "succeeded", "partial", "failed", "uncertain"].includes(record.action.state)))) throw new ControlError("storage_corrupt");
   return parsed.data;
 }
 
@@ -125,6 +130,9 @@ export function createActionStore(root: string, owner: BackendOwner, io?: Durabl
           : record.ownerDecision && (existing.action.state !== "prepared"
             || record.ownerDecision.preparationRevision !== existing.action.revision
             || record.action.state !== (record.ownerDecision.decision === "approve" ? "approved" : "rejected"))) throw new ControlError("action_conflict");
+        if (existing.queueIntent ? payloadDigest(existing.queueIntent) !== payloadDigest(record.queueIntent ?? null)
+          : record.queueIntent && (existing.action.state !== "approved" || record.action.state !== "executing")) throw new ControlError("action_conflict");
+        if (existing.scheduleBinding !== record.scheduleBinding) throw new ControlError("action_conflict");
         if (existing.action.id !== record.action.id || !transitions[existing.action.state]?.includes(record.action.state)
           || payloadDigest(existing.action.payload) !== payloadDigest(record.action.payload)
           || payloadDigest(existing.accountBindings) !== payloadDigest(record.accountBindings)

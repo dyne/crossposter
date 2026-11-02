@@ -3,10 +3,12 @@ import type { ScheduledPost } from "@/lib/types";
 import type { PublishRunInput, PublishRunResult } from "@/lib/publishing/service";
 import { claimScheduledPost, createScheduledTickService, type ScheduledQueueStore } from "@/lib/scheduling/service";
 import { scheduledPost } from "./support/fixtures";
+import { publishingPost } from "@/lib/scheduling/policy";
 
 const now = new Date("2026-01-15T12:00:00.000Z");
 const due = "2026-01-15T11:00:00.000Z";
 const success: PublishRunResult = { results: [{ platform: "bluesky", ok: true, message: "Published" }] };
+success.publishedPost = { id: "fixture-history", createdAt: now.toISOString(), text: "Fixture history", platforms: ["bluesky"], results: success.results };
 const rejection: PublishRunResult = { results: [{ platform: "bluesky", ok: false, message: "Rejected" }] };
 
 function gate() {
@@ -48,12 +50,17 @@ function fixture(posts = [scheduledPost({ scheduledFor: due })]) {
 }
 
 describe("explicit local claim result", () => {
+  it("does not revive a failed or already publishing record through the publishing policy", () => {
+    for (const status of ["failed", "publishing"] as const) {
+      const post = scheduledPost({ status }); expect(publishingPost(post, now)).toBe(post);
+    }
+  });
   it.each([
     { status: "scheduled" as const, kind: "claimed" },
-    { status: "publishing" as const, kind: "already-publishing" },
+    { status: "publishing" as const, kind: "skipped" },
     { status: "failed" as const, kind: "skipped" }
   ])("reports $kind for a $status entry without asserting ownership", ({ status, kind }) => {
-    const initial = scheduledPost({ status, lastError: "Previous error", attempts: 4 });
+    const initial = scheduledPost({ status, scheduledFor: due, lastError: "Previous error", attempts: 4 });
     const f = fixture([initial]);
     const claim = claimScheduledPost(f.store, initial.id, now);
     expect(claim.kind).toBe(kind);
@@ -61,7 +68,7 @@ describe("explicit local claim result", () => {
       expect(claim.post).toEqual(status === "scheduled"
         ? { ...initial, status: "publishing", updatedAt: now.toISOString(), lastError: undefined }
         : initial);
-    } else expect(claim.reason).toBe("not-publishing");
+    } else expect(claim.reason).toBe("not-scheduled");
     expect(f.publish).not.toHaveBeenCalled();
   });
 
@@ -73,7 +80,22 @@ describe("explicit local claim result", () => {
 });
 
 describe("injected scheduled tick", () => {
-  it("reproduces duplicate dispatch with independent running guards and a shared stale snapshot", async () => {
+  it.each(["content", "target", "earlier-time", "clock"] as const)("checks the current due time and revision after a held publisher: %s", async (change) => {
+    const f = fixture([scheduledPost({ id: "first", text: "first", scheduledFor: due }), scheduledPost({ id: "second", text: "second", scheduledFor: now.toISOString() })]);
+    const entered = gate(); const held = gate(); let inFlight = 0;
+    f.publish.mockImplementation(async () => { inFlight++; try { entered.release(); await held.promise; return success; } finally { inFlight--; } });
+    const operation = f.tick();
+    try {
+      await within(entered.promise); expect(inFlight).toBe(1); expect(f.records()[1].status).toBe("scheduled");
+      if (change === "clock") f.clock.mockReturnValue(new Date("2026-01-15T11:30:00Z"));
+      else f.store.updateScheduledPost("second", (post) => ({ ...post, ...(change === "content" ? { text: "Changed content" }
+        : change === "target" ? { targets: [{ id: "other", platform: "bluesky" as const }] } : { scheduledFor: due }) }));
+      held.release(); expect(await within(operation)).toEqual({ processed: 1, skipped: false });
+      expect(f.publish).toHaveBeenCalledOnce(); expect(f.records()[0]).toMatchObject({ id: "second", status: "scheduled" });
+    } finally { held.release(); await within(Promise.allSettled([operation])); expect(inFlight).toBe(0); expect(f.state.running).toBe(false); }
+  });
+
+  it("skips an already claimed entry across independent running guards sharing a stale snapshot", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const f = fixture([
       scheduledPost({ id: "first", text: "first", scheduledFor: due }),
@@ -109,8 +131,8 @@ describe("injected scheduled tick", () => {
       expect(f.records().map((post) => post.status)).toEqual(["publishing", "publishing"]);
       expect(inFlight).toBe(2);
       firstHeld.release();
-      expect(await within(firstTick)).toEqual({ processed: 2, skipped: false });
-      expect(f.publish.mock.calls.map(([input]) => input.text)).toEqual(["first", "second"]);
+      expect(await within(firstTick)).toEqual({ processed: 1, skipped: false });
+      expect(f.publish.mock.calls.map(([input]) => input.text)).toEqual(["first"]);
       expect(otherPublish.mock.calls.map(([input]) => input.text)).toEqual(["second"]);
       expect(inFlight).toBe(1);
       secondHeld.release();
@@ -148,7 +170,7 @@ describe("injected scheduled tick", () => {
     const f = fixture([post]);
     const dispatch = new Date("2026-01-15T12:00:01.000Z");
     const complete = new Date("2026-01-15T12:00:02.000Z");
-    f.clock.mockReturnValueOnce(now).mockReturnValueOnce(dispatch).mockReturnValueOnce(complete);
+    f.clock.mockReturnValueOnce(now).mockReturnValueOnce(now).mockReturnValueOnce(dispatch).mockReturnValueOnce(complete);
     f.publish.mockImplementation(async (input) => {
       expect(f.records()[0]).toMatchObject({ status: "publishing", updatedAt: now.toISOString() });
       expect(input).toEqual({
@@ -192,14 +214,22 @@ describe("injected scheduled tick", () => {
     expect(f.records()[0]).toMatchObject({ attempts: 9, publishedPostId: "history-id", results: rejection.results });
   });
 
-  it.each([
-    { name: "full success", result: success },
-    { name: "partial success", result: { results: [...success.results, { platform: "x" as const, ok: false, uncertain: true, message: "Unknown" }] } }
-  ])("removes a $name without incrementing attempts", async ({ result }) => {
+  it.each(["full", "partial"])("persists complete %s outcomes before removing an item with retained history", async (kind) => {
     const f = fixture();
+    const results = kind === "full" ? success.results : [...success.results, { platform: "x" as const, ok: false, uncertain: true, message: "Unknown" }];
+    const result = { results, publishedPost: { ...success.publishedPost!, results } };
+    const remove = f.store.removeScheduledPost.getMockImplementation()!;
+    f.store.removeScheduledPost.mockImplementation((id) => { expect(f.records()[0].results).toEqual(results); return remove(id); });
     f.publish.mockResolvedValue(result);
     expect(await f.tick()).toEqual({ processed: 1, skipped: false });
     expect(f.records()).toEqual([]);
+  });
+
+  it("keeps successful and uncertain outcomes inspectable when no retained history is returned", async () => {
+    const f = fixture(); const results = [...success.results, { platform: "mastodon" as const, ok: false, uncertain: true, message: "Unknown" }];
+    f.publish.mockResolvedValue({ results }); expect(await f.tick()).toEqual({ processed: 1, skipped: false });
+    expect(f.records()[0]).toMatchObject({ status: "failed", attempts: 1, results }); expect(f.store.removeScheduledPost).not.toHaveBeenCalled();
+    expect(await f.tick()).toEqual({ processed: 0, skipped: false }); expect(f.publish).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -259,7 +289,7 @@ describe("injected scheduled tick", () => {
     });
     expect(await f.tick()).toEqual({ processed: 1, skipped: false });
     expect(f.records()[0]).toMatchObject({ status: "failed", attempts: 1, lastError: "Result write failed" });
-    expect(f.records()[0].results).toBeUndefined();
+    expect(f.records()[0].results).toEqual(rejection.results);
   });
 
   it("rejects when saving the exception also fails, aborts later entries and releases running", async () => {
