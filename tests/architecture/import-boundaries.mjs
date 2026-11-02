@@ -56,7 +56,8 @@ export function checkBoundaries(files) {
       || browserLibrary.test(root) || sharedContract.test(root);
     const pureCodec = codec.test(root);
     const service = useCase.test(root);
-    if (!browser && !pureCodec && !service) continue;
+    const bridge = /^mcp\//.test(root);
+    if (!browser && !pureCodec && !service && !bridge) continue;
     const visited = new Set();
     function walk(filename, trace) {
       if (visited.has(filename)) return;
@@ -66,7 +67,8 @@ export function checkBoundaries(files) {
         const chain = [...trace, specifier].join(" -> ");
         if (target === null || specifier === "<computed import>") {
           violations.add(`${root}: unresolved runtime dependency: ${chain}`);
-        } else if (isBuiltin(specifier) || (browser && (specifier === "server-only" || (target && serverPath.test(target))))
+        } else if ((!bridge && isBuiltin(specifier)) || ((browser || bridge) && (specifier === "server-only" || (target && serverPath.test(target))))
+          || (bridge && (specifier === "next" || specifier.startsWith("next/")))
           || (pureCodec && specifier === "server-only")
           || (target && (pureCodec || service) && (serverPath.test(target) && !codec.test(target) && !useCase.test(target)))) {
           violations.add(`${root}: forbidden runtime dependency: ${chain}`);
@@ -87,6 +89,6 @@ export function readProductionSources(root) {
       else if (/\.(?:tsx?|css)$/.test(filename)) files.set(filename, readFileSync(path.join(root, filename), "utf8"));
     }
   }
-  for (const directory of ["app", "components", "lib"]) visit(directory);
+  for (const directory of ["app", "components", "lib", "mcp"]) visit(directory);
   return files;
 }

@@ -12,13 +12,16 @@
     "url": "https://github.com/dyne/crossposter/issues"
   },
   "bin": {
-    "crossposter": "bin/crossposter.mjs"
+    "crossposter": "bin/crossposter.mjs",
+    "crossposter-mcp": "bin/crossposter-mcp.mjs"
   },
   "files": [
     "app",
     "bin",
     "components",
     "lib",
+    "mcp",
+    "dist/mcp",
     "public",
     "scripts",
     "next.config.mjs",
@@ -38,7 +41,9 @@
     "crossposter": "node bin/crossposter.mjs",
     "local:install": "./scripts/install-local-service.sh",
     "local:uninstall": "./scripts/uninstall-local-service.sh",
-    "build": "next build",
+    "build": "next build && npm run build:mcp",
+    "prepack": "npm run build:mcp",
+    "build:mcp": "node scripts/build-mcp.mjs",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -47,9 +52,12 @@
     "test:boundaries": "node --test tests/architecture/import-boundaries.test.mjs",
     "test:e2e": "playwright test",
     "test:control-runtime": "node --test tests/control-runtime.test.mjs tests/control-owner-process.test.mjs tests/control-approval-runtime.test.mjs tests/control-execution-process.test.mjs tests/control-publication-runtime.test.mjs tests/control-scheduler-runtime.test.mjs",
+    "test:mcp": "npm run build:mcp && node --test tests/mcp/*.test.mjs",
+    "test:mcp-package": "node --test tests/mcp-package.test.mjs",
     "test:browser-verification": "python3 -B -m unittest discover -s tests -p 'test_*.py'"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
     "image-size": "^2.0.4",
     "lucide-react": "^0.577.0",
     "next": "^15.5.28",
@@ -64,6 +72,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
+    "@modelcontextprotocol/client": "2.4.0",
     "@playwright/test": "1.64.1",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "6.9.1",

@@ -1,0 +1,132 @@
+{
+  "get_status": {
+    "input": "71fc596a20f27da3dec80050e5d1f553eba34aea24c2853b853488a811e6b892",
+    "output": "6b0a70ed850094baf0ef7a097fc346637e10a5a51a07ae05a36daae814c46022",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "list_targets": {
+    "input": "70fde296d6cce58f282a56e27e8b79504215fd3771fd106df89863d9226ef0fb",
+    "output": "361658cd0048ea45e273caabd56292b546fff185573beec36c3401acb235f015",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "get_draft": {
+    "input": "71fc596a20f27da3dec80050e5d1f553eba34aea24c2853b853488a811e6b892",
+    "output": "05fd65108d9afcd47df14279a7cb9e4d7117a21a343d45686ded8984fda7f8bf",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "save_draft": {
+    "input": "d33de71252241693e4075ada5df86d5eddb49161345307dda0b7a695f047808b",
+    "output": "05fd65108d9afcd47df14279a7cb9e4d7117a21a343d45686ded8984fda7f8bf",
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "clear_draft": {
+    "input": "dd07979241f1ceeac5314fe9e1f4793f0dbb003912848c7b2c88b11aee85e852",
+    "output": "05fd65108d9afcd47df14279a7cb9e4d7117a21a343d45686ded8984fda7f8bf",
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "upload_media": {
+    "input": "1b36787361a429f2b6ab8477546a933686fd968a0eca21e280d5f4abc58188b8",
+    "output": "d468be5f37947d1bbc76fbe06a950ac6ec6ec8dbe30dff4ddcba94277deb4087",
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  "get_media": {
+    "input": "b5534cdaa5d620c576f16848e87f340748a16370eb6923960c40099c3dab86f1",
+    "output": "d468be5f37947d1bbc76fbe06a950ac6ec6ec8dbe30dff4ddcba94277deb4087",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "prepare_action": {
+    "input": "7c302648874db380e507281027bc1ebc1f42d730e47f75557c11fc8cea9bfdef",
+    "output": "aed26c930599097841c8bccd71b7822de5d75469b6903da36872c4f911c865b9",
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "get_action": {
+    "input": "892288089088e4e65ba4d0ae49b1863f9fd3bc170482f4132838cf4d00073df6",
+    "output": "aed26c930599097841c8bccd71b7822de5d75469b6903da36872c4f911c865b9",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "commit_action": {
+    "input": "62394ff304c77528e152bf7a778ce2ae508bbf2d09a4dadaeef8b0ef59dd929c",
+    "output": "aed26c930599097841c8bccd71b7822de5d75469b6903da36872c4f911c865b9",
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": true
+    }
+  },
+  "list_posts": {
+    "input": "70fde296d6cce58f282a56e27e8b79504215fd3771fd106df89863d9226ef0fb",
+    "output": "1a15ef1ef8e4e3fbca066d9ecdbf14b22aa7cb92639ff11fb494179ee8cd5932",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "get_post": {
+    "input": "5dc9762334ee5a7b35af6e0306ebe25c4785a8496335f757cea9c3ee73464669",
+    "output": "e32f8e747918ba0b67dca7765bb2a36c00a4363b92f7540e50196cbc528f79cd",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  "list_scheduled_posts": {
+    "input": "70fde296d6cce58f282a56e27e8b79504215fd3771fd106df89863d9226ef0fb",
+    "output": "5de57d7cee974d43a1c9222924f6813db9176a1c543d1f2407ebd3c1717cd96b",
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  }
+}
