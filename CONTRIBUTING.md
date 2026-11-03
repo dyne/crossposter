@@ -76,6 +76,8 @@ npm run lint
 npm run build
 npm run test:control-runtime
 npm run test:e2e
+npm run test:mcp
+npm run test:mcp-package
 ```
 
 Install Chromium once with `npx playwright install chromium` before the browser

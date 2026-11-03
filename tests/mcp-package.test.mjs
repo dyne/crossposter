@@ -13,31 +13,34 @@ test("actual npm tarball preserves runtime/bridge/launcher bytes, excludes priva
   const evidenceParent = process.env.CROSSPOSTER_TEST_EVIDENCE_DIR || path.join(repository, "test-results/mcp-package"); mkdirSync(evidenceParent, { recursive: true });
   const evidence = mkdtempSync(path.join(evidenceParent, "audit-"));
   const hash = (bytes) => createHash("sha256").update(bytes).digest("hex"); const steps = [];
-  const run = (name, command, args, cwd, environment = cleanEnv) => {
+  const run = (name, command, args, cwd, environment = cleanEnv, expectedExit = 0) => {
     const startedAt = new Date().toISOString();
     const result = spawnSync(command, args, { cwd, env: environment, encoding: "utf8", timeout: 100000, maxBuffer: 8 * 1024 * 1024 });
     const completedAt = new Date().toISOString(), log = path.join(evidence, `${name}.log`); writeFileSync(log, result.stdout + result.stderr);
     steps.push({ command: [command, ...args], cwd, startedAt, completedAt, observedAt: new Date().toISOString(), exit: result.status,
       signal: result.signal, log, logSha256: hash(readFileSync(log)), logBytes: readFileSync(log).length });
     writeFileSync(path.join(evidence, "steps.json"), JSON.stringify(steps, null, 2));
-    assert.equal(result.status, 0, `${name} must pass; complete retained diagnostics: ${log}`); return result;
+    assert.equal(result.status, expectedExit, `${name} exit must match; complete retained diagnostics: ${log}`); return result;
   };
   let child, exited, bridge;
   try {
+    const dryRun = JSON.parse(run("pack-dry-run", "npm", ["pack", "--dry-run", "--json", "--cache", "/tmp/crossposter-npm-cache"], repository).stdout)[0];
     const packed = run("pack", "npm", ["pack", "--json", "--pack-destination", root, "--cache", "/tmp/crossposter-npm-cache"], repository);
     const listing = JSON.parse(packed.stdout)[0]; const tarball = path.join(root, listing.filename);
+    assert.deepEqual(listing.files, dryRun.files, "actual package paths, byte sizes and modes match the audited dry-run");
     copyFileSync(tarball, path.join(evidence, listing.filename));
     const extracted = path.join(root, "extracted"); mkdirSync(extracted); run("extract", "tar", ["-xzf", tarball, "-C", extracted], root);
     const app = path.join(extracted, "package"); const files = [];
     for (const entry of listing.files) {
       assert.equal(/(^|\/)(?:tests|test-results|coverage|\.gestalt|\.impeccable|\.next|node_modules)(?:\/|$)/.test(entry.path), false, "package excludes test/generated coordination trees");
-      assert.equal(/(^|\/)(?:\.poster-|poster\.config\.local|\.env(?:\.|$))/.test(entry.path), false, "package excludes all private control/provider state");
+      assert.equal(/(^|\/)(?:\.poster-|\.instagram-|\.pinterest-|poster\.config\.local|\.env(?:\.|$))/.test(entry.path), false, "package excludes all private control/provider state");
       const source = path.join(repository, entry.path), delivered = path.join(app, entry.path);
       assert.ok(existsSync(source), "every delivered byte has current checkout provenance");
       assert.equal(readFileSync(delivered).equals(readFileSync(source)), true, `runtime bytes match: ${entry.path}`);
       files.push({ path: entry.path, bytes: readFileSync(delivered).length, sha256: hash(readFileSync(delivered)) });
     }
-    for (const required of ["bin/crossposter.mjs", "bin/crossposter-mcp.mjs", "mcp/main.ts", "dist/mcp/mcp/main.js", "dist/mcp/mcp/backend.js", "dist/mcp/mcp/upload.js", "dist/mcp/lib/control/credential.js", "scripts/setup-control.mjs"]) assert.ok(files.some((file) => file.path === required), required);
+    for (const required of ["bin/crossposter.mjs", "bin/crossposter-mcp.mjs", "mcp/main.ts", "dist/mcp/mcp/main.js", "dist/mcp/mcp/backend.js", "dist/mcp/mcp/upload.js", "dist/mcp/lib/control/credential.js", "scripts/setup-control.mjs", "scripts/codex-crossposter.mjs", "MCP_SETUP.md", "AGENT_POSTING.md", "MCP_DESIGN_ANALYSIS.md"]) assert.ok(files.some((file) => file.path === required), required);
+    for (const executable of ["bin/crossposter.mjs", "bin/crossposter-mcp.mjs"]) assert.ok(listing.files.find((file) => file.path === executable).mode & 0o111, `${executable} retains executable mode`);
     // npm intentionally omits package-lock.json from tarballs. Supply the current
     // exact lock only as build evidence, never imply it was a published file.
     copyFileSync(path.join(repository, "package-lock.json"), path.join(app, "package-lock.json"));
@@ -47,12 +50,21 @@ test("actual npm tarball preserves runtime/bridge/launcher bytes, excludes priva
     const caller = path.join(root, "different cwd ü"), data = path.join(root, "data"), media = path.join(root, "media");
     for (const directory of [caller, data, media]) mkdirSync(directory);
     const port = await freePort(), origin = `http://127.0.0.1:${port}`;
+    const setupHelp = run("setup-help", process.execPath, [path.join(app, "scripts/setup-control.mjs"), "--help"], caller);
+    assert.match(setupHelp.stdout, /Usage: node scripts\/setup-control.mjs --data-root/); assert.equal(setupHelp.stderr, "");
+    const debugHelp = run("manual-debug-launcher-help", process.execPath, [path.join(app, "scripts/codex-crossposter.mjs"), "--help"], caller);
+    assert.match(debugHelp.stdout, /\.codex-crossposter/); assert.equal(debugHelp.stderr, "");
+    const backendHelp = run("backend-help", process.execPath, [path.join(app, "bin/crossposter.mjs"), "--help"], caller);
+    assert.match(backendHelp.stdout, /--host 127\.0\.0\.1/); assert.equal(backendHelp.stderr, "");
+    const bridgeHelp = run("bridge-help-refused", process.execPath, [path.join(app, "bin/crossposter-mcp.mjs"), "--help"], caller, cleanEnv, 1);
+    assert.equal(bridgeHelp.stdout, ""); assert.match(bridgeHelp.stderr, /^Crossposter MCP startup refused\./);
     run("setup", process.execPath, [path.join(app, "scripts/setup-control.mjs"), "--data-root", data, "--origin", origin], caller);
     const credential = JSON.parse(readFileSync(path.join(data, ".poster-control.json"), "utf8"));
-    const owner = "package-independent-owner-fixture";
-    writeFileSync(path.join(data, "poster.config.local.json"), JSON.stringify({ values: { DEVTO_API_KEY: "scheduler-fixture-api-key", POSTER_ADMIN_PASSWORD: owner } }));
+    const owner = "package-automated-owner-fixture";
+    writeFileSync(path.join(data, "poster.config.local.json"), JSON.stringify({ values: { DEVTO_API_KEY: "scheduler-fixture-api-key" } }));
     child = spawn(process.execPath, [path.join(app, "bin/crossposter.mjs"), "--host", "127.0.0.1", "--port", String(port), "--data-dir", data, "--no-open", "--no-update"], {
       cwd: caller, env: { ...cleanEnv, CROSSPOSTER_APP_ROOT: app, CROSSPOSTER_DATA_DIR: data, CROSSPOSTER_RUN_MODE: "production", POSTER_DISABLE_SCHEDULER: "false",
+        POSTER_ADMIN_PASSWORD: owner, CROSSPOSTER_TIMEZONE: "Europe/Berlin",
         CROSSPOSTER_SCHEDULER_FIXTURE_ORIGIN: origin, NODE_OPTIONS: `--import=${path.join(repository, "tests/control-scheduler-guard.mjs")}` }, stdio: ["pipe", "pipe", "pipe"] });
     exited = once(child, "exit"); let output = "";
     for (const stream of [child.stdout, child.stderr]) stream.on("data", (bytes) => { output = (output + bytes).slice(-16384); });

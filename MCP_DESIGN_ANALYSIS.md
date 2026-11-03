@@ -1,7 +1,8 @@
 # Crossposter MCP architecture decision
 
-Working analysis, 2 November 2026. This document records architecture evidence,
-product decisions, and the implementation contract for the MCP planning session.
+Architecture record, 2 November 2026. This document retains planning evidence,
+product decisions, and the implementation contract, with delivered behavior
+described below. Planning-era observations are historical unless stated otherwise.
 It is an engineering decision record, not a record of private reasoning.
 
 ## Objective and confirmed requirements
@@ -16,7 +17,34 @@ acceptance client is Codex / Gestalt.
 Confirmation must be recorded through a separate local approval surface, not
 merely asserted by the agent in chat. Browser interaction is also acceptable
 when a provider requires sign-in. Implementation is not authorized by this
-planning session.
+planning session. Implementation subsequently proceeded under the supervised plan.
+
+## Delivered adapter and operating handoff
+
+The backend/control, local approval, durable execution/scheduling and thirteen-tool
+stdio adapter are implemented. [MCP_SETUP.md](MCP_SETUP.md) documents separate
+backend startup, root-bound machine identity, independent owner credential setup,
+literal-path Codex configuration, media limits, timezones and recovery.
+[AGENT_POSTING.md](AGENT_POSTING.md) leads with MCP; its legacy HTTP recipes retain
+their separate policy. The adapter's own executable accepts no flags and never
+starts the backend, scheduler, browser or updater. Preparation, independent
+approval and commit remain separate transitions.
+
+The package ships compiled ESM, shared schema imports and both entry points.
+`test:mcp-package` audits dry-run and extracted tarballs with the current checkout
+lock, byte comparisons and an injected-provider schedule after MCP disconnect.
+Those protocol/runtime fixtures do not prove actual Codex / Gestalt activation
+or an independent owner interaction. On 3 November 2026, the user explicitly
+waived that live session for this implementation and requested a manual debugging
+handoff. The shipped `scripts/codex-crossposter.mjs` creates a private dedicated
+`~/.codex-crossposter` at user launch, selects it for the child without changing
+the caller's HOME/session, and retains private startup/stderr/protocol metadata.
+It copies no authentication/configuration and exposes a small direct-tool console,
+without a model turn or owner decision. A checkout-only intercepted fixture is
+documented for the user's future manual use. Live host identity, negotiated MCP
+version/discovery and independent owner observations remain unverified/deferred;
+they do not block milestone or terminal review under this explicit revision.
+No real-account publication, package release or deployment is implied.
 
 ## Evidence baseline
 
@@ -637,8 +665,9 @@ intercepted providers; no plan gate publishes to a real account. Add protocol
 client/subprocess tests, independent approval tests, crash/replay fault injection,
 queue interleaving tests and package-tarball verification. Terminal review checks
 the whole branch against this record and the frozen tool catalog. Actual
-Codex / Gestalt acceptance must record real client observations; an SDK harness
-alone is not evidence of successful host installation.
+Codex / Gestalt acceptance, when performed later by the user, must record real
+client observations; an SDK/fake-host harness is not proof of host installation.
+That live session is explicitly deferred under the 3 November user revision.
 
 ## Scope boundary and implementation handoff
 

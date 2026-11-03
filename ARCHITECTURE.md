@@ -125,6 +125,30 @@ applicable. Document unofficial integrations where users configure them.
 
 ## Test and package workflow
 
+The separate Node stdio entry is `bin/crossposter-mcp.mjs`; `scripts/build-mcp.mjs`
+compiles `mcp/main.ts` and its import closure to ESM in `dist/mcp`, rewriting
+local aliases and extensions. It rejects Next/server-only/provider/storage
+runtime imports. `prepack` compiles the bridge; the installed/extracted backend
+still needs a Next build. The package includes both executables, shared control
+schemas/imports, `scripts/setup-control.mjs` and the operating guide. It excludes
+tests, personal state and generated evidence. npm excludes the lock; extracted
+verification supplies the same checkout lock explicitly.
+
+[MCP_SETUP.md](MCP_SETUP.md) is the installation and recovery reference;
+[AGENT_POSTING.md](AGENT_POSTING.md) is the agent workflow. `test:mcp-package`
+checks dry-run/actual pack identity, executable modes, delivered source/dist
+bytes, a fresh extracted locked build, help/stdio behavior and both executables
+from an unrelated cwd. Its injected-provider approval fixture establishes runtime
+behavior. The user deferred actual host/owner acceptance on 3 November 2026;
+those unverified observations no longer block this implementation review.
+`scripts/codex-crossposter.mjs` is a user-invoked stdio host launcher/direct-tool
+console. It selects a private `~/.codex-crossposter` only in the child environment,
+copies no auth/config, starts no backend/model turn, and retains per-run lifecycle,
+stderr and protocol metadata. Fake executable tests verify its observable contract
+without launching Codex. `tests/manual_mcp_fixture.py` supplies an optional later
+checkout-only backend using the existing provider guard and a local hidden owner
+prompt; it never approves or starts Codex and does not ship in the package.
+
 [CONTRIBUTING.md](CONTRIBUTING.md) lists all commands;
 [tests/README.md](tests/README.md) explains the harness and measurement, and
 [tests/SCENARIOS.md](tests/SCENARIOS.md) maps required behavior to executable tests.
