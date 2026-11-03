@@ -1,10 +1,118 @@
 # Crossposter — Agent Posting Guide
 
-You are an agent that publishes social posts through a **locally running Crossposter
-server** over its HTTP API. This file is everything you need — you do **not** need to
-read Crossposter's source code.
+For Codex / Gestalt, use the thirteen local MCP tools below. The owner configures
+the persistent backend and bridge using [MCP_SETUP.md](MCP_SETUP.md). Credentials,
+owner login and account setup stay outside tool calls and chat. Do not use legacy
+HTTP publishing to bypass the MCP approval workflow.
 
-Crossposter composes one post and sends it to multiple connected social accounts
+For the user's later manual debugging, [the isolated launcher](MCP_SETUP.md#manual-codex-launch-use-and-debugging)
+creates `~/.codex-crossposter` on invocation, retains private per-run logs, and
+offers `tools`, `call <tool> <JSON object>` and `quit` in `--console` mode. It runs
+no model turn or owner decision. Actual host/independent-owner acceptance was
+explicitly deferred by the user on 3 November 2026; it was not claimed passed.
+
+## MCP daily workflow
+
+1. Call `get_status` and check the configured backend identity/version, approval
+   setup and scheduler state. Use `list_targets` for existing accounts; readiness
+   checks configuration, not provider login. Follow `nextCursor` until null on
+   lists (limits 1–100, default 25); restart on `cursor_stale`.
+2. Call `get_draft` for the singleton draft and current revision. If needed,
+   `upload_media` takes one absolute `localPath` inside configured media roots.
+   Use the returned media ID; do not put file bytes/base64 in model context.
+   `get_media` reads its safe metadata and digest.
+3. `save_draft` replaces the shared draft with `expectedRevision`, `content` and
+   explicit `targetIds`; `clear_draft` takes the current `expectedRevision` and
+   clears only the draft. Neither publishes or requires owner approval. Reload
+   after a revision conflict; do not overwrite another edit using stale state.
+4. `prepare_action` takes an explicit mode and stable `requestKey`. It validates
+   and saves the exact immutable preview, with a 30-minute deadline. Preparation
+   neither publishes nor enqueues. Repeating the identical canonical request
+   under its key returns the same action; changed intent needs a new key.
+5. Show the full preview and approval path at the configured loopback origin.
+   The owner opens the page, enters their separate password directly, checks
+   accounts/content/media/time and chooses Approve or Reject. Never ask for that
+   password in chat or attempt to approve on the owner's behalf. Opening the
+   page, a client tool prompt or chat confirmation cannot record a decision.
+6. After independent approval, `commit_action` takes only `actionId` and
+   `expectedDigest`. Use the returned values exactly. Poll `get_action` on that
+   ID after commit, disconnect or timeout; backend work can outlive the call.
+   A repeated commit returns the same durable execution. `list_posts` and
+   `get_post` retain post/action links and per-target outcomes.
+
+Content always includes `title`, `text`, `linkUrl` and nullable `mediaId`. Target
+IDs come from `list_targets`; never infer account identity from a label or active
+profile. Empty draft content is valid; publication retains the provider rules
+and one-media limit. A saved draft is optional before preparation.
+
+Example `save_draft` arguments (replace all returned-value placeholders):
+
+```json
+{
+  "expectedRevision": "<revision from get_draft>",
+  "content": {"title": "", "text": "Caption for review", "linkUrl": "", "mediaId": null},
+  "targetIds": ["<id from list_targets>"]
+}
+```
+
+Example `prepare_action` arguments for immediate publication:
+
+```json
+{
+  "mode": "publish",
+  "requestKey": "launch-review-001",
+  "content": {"title": "", "text": "Caption for review", "linkUrl": "", "mediaId": null},
+  "targetIds": ["<id from list_targets>"]
+}
+```
+
+Example commit after the owner approves that preparation:
+
+```json
+{"actionId": "<id from prepare_action>", "expectedDigest": "<payloadDigest from prepare_action>"}
+```
+
+## MCP schedules and recovery
+
+For schedule mode, add future `scheduledFor` with `Z` or a numeric offset to
+the publication preparation. Resolve natural-language times first; offset-free
+times are rejected. The preview freezes UTC and the backend display timezone
+(`CROSSPOSTER_TIMEZONE`, default `Europe/Berlin`). A time that passes before
+commit requires a new preparation, rather than immediate publication.
+
+`list_scheduled_posts` is a pure read. To reschedule, prepare with `mode` set to
+`reschedule`, a new `requestKey`, `scheduleId`, its current `expectedRevision`
+and the new `scheduledFor`. Cancel uses `mode` set to `cancel`, a new key, the
+schedule ID and revision, without a new time. Each needs separate owner approval
+and commit. Cancel affects local queue work, never an existing provider post.
+An accepted schedule retains its authorization after the preparation deadline;
+`scheduled` and `rescheduled` mean queued, not published. Keep the backend running.
+
+Inspect every target outcome. `succeeded` is recorded success; `failed` is a
+known failure; `uncertain` means external acceptance could have happened;
+`not_dispatched` means no durable dispatch claim; `dispatching` is in progress.
+Partial/uncertain summaries are not overall success. After a lost response,
+inspect the existing action or repeat an identical preparation with its original
+key. Never generate a new action merely because a tool timed out. Restart
+preserves known results and marks interrupted external calls uncertain; it does
+not automatically resume or retry them. Overdue work never dispatched can catch
+up on the next backend tick. Check accounts manually before a deliberate new
+attempt and exclude known successes; obtain a new preview and approval.
+
+Changed content/account/media/revisions or expired/rejected decisions require a
+new preparation. For storage/ownership errors, preserve the journal and ask the
+owner to inspect local state; do not delete files to force execution. See
+[the recovery table](MCP_SETUP.md#6-polling-and-recovery) for exact errors.
+
+## Legacy HTTP API
+
+The remaining sections describe the incumbent HTTP API for explicitly authorized
+legacy scripts and dashboard clients. These endpoints retain their existing
+authentication policy; they do not enforce MCP's independent owner approval.
+`GET /api/config` can expose credentials and is not the MCP discovery route.
+For MCP operation, use `list_targets` and the workflow above.
+
+Crossposter composes one post and sends it to multiple configured social accounts
 (X/Twitter, LinkedIn, Bluesky, Mastodon, Instagram, YouTube, Dribbble, Pinterest,
 Dev.to, Hacker News, Nostr). Accounts are configured by the human in the
 Crossposter UI; you only choose which to post to and what to post.

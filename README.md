@@ -13,6 +13,7 @@
 <p align="center">
   <a href="#supported-channels">Supported Channels</a>
   · <a href="#run-locally">Run Locally</a>
+  · <a href="MCP_SETUP.md">Local MCP Setup</a>
   · <a href="#provider-setup">Provider Setup</a>
   · <a href="#security">Security</a>
 </p>
@@ -114,14 +115,29 @@ the scheduled time:
 If the server is offline when a post is due, it will publish the next time the
 server starts and the scheduler tick runs.
 
-## Posting From An Agent (HTTP API)
+## Posting From Codex / Gestalt (MCP)
 
-Crossposter exposes a small local HTTP API (`/api/health`, `/api/config`,
-`/api/media`, `/api/publish`, `/api/scheduled`, `/api/draft`) so an external
-agent or script can publish, schedule, or stage drafts (including media) without
-the UI. See [`AGENT_POSTING.md`](AGENT_POSTING.md) — a self-contained guide you
-can hand to an agent so it can post through your running server on
-`http://localhost:2004`.
+The local `crossposter-mcp` bridge exposes thirteen tools for existing accounts:
+discover targets, upload one media item, save/reload the shared draft, prepare an
+action, obtain separate owner approval in a local browser, commit, and inspect
+publication or schedule outcomes. The persistent Crossposter backend owns all
+provider and scheduled work, including after the client disconnects. The existing
+dashboard remains optional for daily use.
+
+Follow [MCP_SETUP.md](MCP_SETUP.md) for a local tarball or checkout installation,
+identity/password setup, exact Codex configuration, timezones and recovery.
+[AGENT_POSTING.md](AGENT_POSTING.md) describes the tool workflow. Opening an
+approval URL or saying yes in chat cannot approve; the owner authenticates
+directly on the local page. Queued, partial and uncertain states are distinct
+from successful publication. The user explicitly deferred the live host/owner
+acceptance session on 3 November 2026. The [manual debugging handoff](MCP_SETUP.md#manual-codex-launch-use-and-debugging)
+includes a shipped launcher with isolated `~/.codex-crossposter` state and private
+persistent logs. No actual-client success is inferred from the automated tests.
+
+The legacy HTTP API is still available for explicitly authorized scripts and
+dashboard clients. Its existing authentication policy is separate from MCP
+approval; use MCP tools for an MCP task. Legacy recipes are labeled in
+[AGENT_POSTING.md](AGENT_POSTING.md#legacy-http-api).
 
 ## Run Locally
 

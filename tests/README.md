@@ -16,6 +16,8 @@ npm run build
 npx playwright install chromium
 npm run test:control-runtime
 npm run test:e2e
+npm run test:mcp
+npm run test:mcp-package
 ```
 
 On a fresh Linux CI host, use `npx playwright install --with-deps chromium` to
