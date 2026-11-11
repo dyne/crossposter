@@ -11,7 +11,7 @@ type Props = {
 export function PublishPanel({
   publishedPosts, results, error, isPublishing, isUploadingMedia, onClearHistory
 }: Props) {
-  return (        <aside className="publish-panel" aria-labelledby="publishPanelTitle">
+  return (        <aside className={`publish-panel${results.length || publishedPosts.length ? " has-outcomes" : ""}`} aria-labelledby="publishPanelTitle">
           <div className="panel-heading compact">
             <div>
               <p className="eyebrow">Publish output</p>

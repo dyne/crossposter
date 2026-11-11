@@ -22,7 +22,7 @@ test("publish sends the selected fixture target and displays an uncertain result
   await page.getByRole("button", { name: "Publish draft", exact: true }).click();
   const results = page.getByLabel("Latest publish result");
   await expect(results).toContainText("Fixture outcome unknown; check profile before retrying.");
-  await expect(results.locator(".badge")).toHaveText("check");
+  await expect(results.locator(".badge")).toHaveText("Outcome unknown");
   expect(fixtureState.publishRequests).toEqual([expect.objectContaining({ text: "Fixture publish only", targets: [expect.objectContaining({ platform: "bluesky", profileId: "fixture" })] })]);
 });
 

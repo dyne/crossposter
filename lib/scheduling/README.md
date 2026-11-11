@@ -23,10 +23,28 @@ rejections remain intact. Collection GET only reads and projects the queue; it
 does not start a timer, recover interrupted work or dispatch overdue records.
 Tick GET returns 405 with `Allow: POST`; explicit POST ticks retain the guarded
 dispatch path, including when automatic timers are disabled. The launcher already
-uses POST for its warmup and periodic pings. PATCH clears errors/results when rescheduling, retaining attempts and
-history linkage; PATCH/DELETE continue to reject publishing/published entries.
-PATCH also rechecks the current queue revision after reading its request body,
+uses POST for its warmup and periodic pings. Timing edits require a never-attempted
+scheduled record or an authoritative terminal action failure with every target
+retained as not dispatched. Generic failure, missing URLs and legacy attempts
+are insufficient. Results, errors, attempts and history remain retained.
+PATCH and control preparation/approval/commit share this rule; PATCH rechecks
+the queue and journal evidence after reading its request body,
 so a concurrently claimed, removed or changed entry cannot be overwritten.
+Approved schedules also require a fresh control preparation and independent
+owner approval for a new time; dashboard PATCH cannot alter frozen authority.
+The dashboard therefore exposes direct timing controls only for untouched
+legacy schedules. Discard keeps its existing status rules.
+
+Account rows name Published, Failed, Outcome unknown or Not sent and retain
+messages without hover. Long diagnostics use native keyboard disclosures.
+Passive dashboard reads may add response-only `outcomes` from a matching action
+journal record; codecs ignore that presentation field and mutation policy never
+trusts it. Unavailable journal evidence is not guessed. Generic legacy failure
+is Failed, not proof of Not sent; missing results for attempted accounts remain
+unknown. Untouched legacy schedules can explain that no attempt has started.
+Blocked timing guidance preserves fresh approval and directs the owner to inspect
+the remote account before composing another attempt. Discard only removes the
+local queue entry. No UI control retries publication automatically.
 
 A tick snapshots due `scheduled` records once, oldest scheduled time first.
 Each attempt reads the latest record through the synchronous update operation.

@@ -14,7 +14,9 @@ async function fixture(scheduled = false) {
   const data = path.join(root, "data"); mkdirSync(data); symlinkSync(path.join(repository, "node_modules"), path.join(root, "node_modules"), "dir");
   const sources = { "lib/control/backend-ownership.ts": "owner", "lib/control/action-store.ts": "action-store",
     "lib/control/execution-service.ts": "execution-service", "lib/control/contracts.ts": "contracts", "lib/control/canonical.ts": "canonical",
-    "lib/control/errors.ts": "errors", "lib/control/queue-service.ts": "queue-service", "lib/platform-catalog.ts": "platform-catalog", "lib/storage/durable-json.ts": "durable-json", "lib/storage/json-limits.ts": "json-limits" };
+    "lib/control/errors.ts": "errors", "lib/control/queue-service.ts": "queue-service",
+    "lib/control/reschedule-policy.ts": "control-reschedule-policy", "lib/scheduling/reschedule-policy.ts": "schedule-reschedule-policy",
+    "lib/platform-catalog.ts": "platform-catalog", "lib/storage/durable-json.ts": "durable-json", "lib/storage/json-limits.ts": "json-limits" };
   for (const [source, name] of Object.entries(sources)) {
     let compiled = ts.transpileModule(readFileSync(path.join(repository, source), "utf8"), {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }

@@ -1,15 +1,13 @@
 import { ExternalLink, Music2, File as FileIcon } from "lucide-react";
-import { SocialLogo } from "@/components/social-logo";
-import { isPlatform, platformLabels } from "@/lib/platform-catalog";
 import { formatBytes, formatDateTime } from "@/lib/compose/presentation";
-import type { PublishedPost } from "@/lib/types";
+import { inspectBeforeNewAttempt, outcomeSummary, publicationRows, type PublicationView } from "@/lib/publication-outcomes";
+import { PublicationOutcomes } from "@/components/publication-outcomes";
 
-export function PublishedHistory({ publishedPosts }: { publishedPosts: PublishedPost[] }) {
+export function PublishedHistory({ publishedPosts }: { publishedPosts: PublicationView[] }) {
   return <>{publishedPosts.length > 0 ? (
               <div className="result-list" aria-label="Published posts">
                 {publishedPosts.map((post) => {
-                  const okCount = post.results.filter((result) => result.ok).length;
-                  const uncertainCount = post.results.filter((result) => result.uncertain).length;
+                  const rows = publicationRows(post.results, post.targets, post.outcomes);
                   const preview = post.text.trim();
                   const heading = post.title?.trim();
 
@@ -20,12 +18,7 @@ export function PublishedHistory({ publishedPosts }: { publishedPosts: Published
                           {heading ? <strong>{heading}</strong> : null}
                           <time className="history-time">{formatDateTime(post.createdAt)}</time>
                         </div>
-                        <span
-                          className={`badge ${okCount > 0 ? "ok" : uncertainCount > 0 ? "unknown" : "err"}`}
-                        >
-                          {okCount}/{post.results.length} ok
-                          {uncertainCount > 0 ? ` · ${uncertainCount} check` : ""}
-                        </span>
+                        <span className="outcome-summary">{outcomeSummary(rows)}</span>
                       </div>
                       {preview ? <p className="history-preview">{preview}</p> : null}
                       {post.linkUrl ? (
@@ -61,47 +54,8 @@ export function PublishedHistory({ publishedPosts }: { publishedPosts: Published
                           </span>
                         </div>
                       ) : null}
-                      <div className="history-platforms">
-                        {post.results.map((result, index) => {
-                          
-                          const className = `history-platform ${
-                            result.ok ? "ok" : result.uncertain ? "unknown" : "err"
-                          }`;
-                          const channelLabel = isPlatform(result.platform) ? platformLabels[result.platform] : result.platform;
-                          const label =
-                            result.profileLabel && result.profileLabel !== channelLabel
-                              ? `${channelLabel} · ${result.profileLabel}`
-                              : channelLabel;
-                          const content = (
-                            <>
-                              <SocialLogo platform={result.platform} size="sm" />
-                              <span>{label}</span>
-                              {result.url ? <ExternalLink size={13} /> : null}
-                            </>
-                          );
-
-                          return result.url ? (
-                            <a
-                              className={className}
-                              href={result.url}
-                              key={result.targetId || `${result.platform}:${index}`}
-                              rel="noreferrer"
-                              target="_blank"
-                              title={result.message}
-                            >
-                              {content}
-                            </a>
-                          ) : (
-                            <span
-                              className={className}
-                              key={result.targetId || `${result.platform}:${index}`}
-                              title={result.message}
-                            >
-                              {content}
-                            </span>
-                          );
-                        })}
-                      </div>
+                      <PublicationOutcomes rows={rows} />
+                      {rows.some((row) => row.state !== "Published" && row.state !== "Not sent") ? <p className="outcome-guidance">{inspectBeforeNewAttempt}</p> : null}
                     </article>
                   );
                 })}

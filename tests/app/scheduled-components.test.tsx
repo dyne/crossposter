@@ -9,18 +9,18 @@ import { calendarPosts } from "./support/scheduled-fixture";
 afterEach(cleanup);
 const actions = () => ({ editValue: "2026-10-28T12:00", busy: false, onEdit: vi.fn(), onReschedule: vi.fn(), onDiscard: vi.fn() });
 
-it("retains target/profile identity, result links and ok-before-uncertain status presentation", () => {
+it("retains target/profile identity and result links while treating contradictory uncertainty conservatively", () => {
   const post = { ...calendarPosts()[0], title: "  ", linkUrl: "https://example.test/post", targets: [{ id: "b:one", platform: "bluesky" as const, profileLabel: "Fixture one" }], results: [
     { platform: "bluesky" as const, targetId: "b:one", profileLabel: "Fixture one", ok: true, uncertain: true, message: "Fixture confirmed", url: "https://example.test/result" },
     { platform: "bluesky" as const, targetId: "b:two", ok: false, message: "Fixture failed" }
   ] };
   render(<ScheduledItem post={post} {...actions()} />);
   expect(screen.getByRole("heading", { name: "Untitled post" })).toBeVisible();
-  expect(screen.getByText("Result: 1/2 ok · 1 check")).toBeVisible();
-  expect(screen.getByRole("link", { name: /Bluesky · Fixture one$/ })).toHaveClass("ok");
-  expect(screen.getByRole("link", { name: /Bluesky · Fixture one$/ })).toHaveAttribute("href", "https://example.test/result");
+  expect(screen.getByText("1 failed · 1 outcome unknown")).toBeVisible();
+  expect(screen.getByText("Outcome unknown")).toHaveClass("unknown");
+  expect(screen.getByRole("link", { name: /Inspect retained link for Bluesky · Fixture one$/ })).toHaveAttribute("href", "https://example.test/result");
   expect(screen.getByRole("link", { name: "https://example.test/post" })).toHaveAttribute("rel", "noreferrer");
-  expect(screen.getByTitle("Fixture failed")).toHaveClass("err");
+  expect(screen.getByText("Fixture failed")).toBeVisible();
 });
 
 it.each(["image", "video", "audio", "file"] as const)("preserves %s media presentation and encoded URLs", (kind) => {
@@ -36,7 +36,7 @@ it.each(["image", "video", "audio", "file"] as const)("preserves %s media presen
 });
 
 it("keeps editable input active while only mutation buttons are busy and hides actions during publishing", () => {
-  const callbacks = actions(); const post = calendarPosts()[0];
+  const callbacks = actions(); const post = calendarPosts()[1];
   const { rerender } = render(<ScheduledItem post={post} {...callbacks} busy />);
   expect(screen.getByRole("button", { name: "Save timing" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Discard" })).toBeDisabled();
@@ -61,4 +61,19 @@ it("distinguishes an empty queue from an empty selected day and the loading stat
   rerender(<ScheduledList {...props} isLoading />);
   expect(screen.getByText("Loading scheduled posts")).toBeVisible();
   expect(screen.queryByText("No posts on this date")).toBeNull();
+});
+
+it.each([
+  { status: "failed" as const, attempts: 1 },
+  { status: "scheduled" as const, attempts: 1 },
+  { status: "scheduled" as const, attempts: 0, authorization: { actionId: "approved", payloadDigest: "frozen" }, results: undefined },
+  { status: "scheduled" as const, attempts: 0, results: [{ platform: "bluesky" as const, ok: true, message: "Published without URL" }] },
+  { status: "scheduled" as const, attempts: 0, results: [{ platform: "bluesky" as const, ok: false, uncertain: true, message: "Unknown" }] }
+])("hides unsafe timing controls while preserving discard for $status/$attempts", (overrides) => {
+  const callbacks = actions();
+  render(<ScheduledItem post={{ ...calendarPosts()[0], ...overrides }} {...callbacks} />);
+  expect(screen.queryByRole("button", { name: "Save timing" })).toBeNull();
+  expect(screen.queryByLabelText("Edit timing")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+  expect(callbacks.onDiscard).toHaveBeenCalledOnce(); expect(callbacks.onReschedule).not.toHaveBeenCalled();
 });

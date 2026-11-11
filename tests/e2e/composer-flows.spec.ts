@@ -55,9 +55,9 @@ test("keyboard compose/target selection/upload/publish restores mixed history an
   await page.getByRole("button", { name: "Publish draft", exact: true }).focus();
   await page.keyboard.press("Enter");
   const history = page.getByLabel("Published posts");
-  await expect(history).toContainText("1/3 ok · 1 check");
+  await expect(history).toContainText("1 published · 1 failed · 1 outcome unknown");
   await expect(history.getByAltText("published-fixture.png")).toBeVisible();
-  await expect(history.getByTitle("Fixture unknown; check profile")).toHaveClass(/unknown/);
+  await expect(history.getByText("Fixture unknown; check profile")).toBeVisible();
   expect(fixtureState.mediaUploads).toBe(1);
   expect(fixtureState.publishRequests).toEqual([expect.objectContaining({ text: "Fixture keyboard post", mediaId: "fixture-media" })]);
   await page.reload();

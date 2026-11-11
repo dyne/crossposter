@@ -11,6 +11,7 @@ import { projectControlConfig, projectControlDraft, projectControlMedia, project
 import type { ControlReadConfig, QueuedPost } from "./read-storage";
 import { ownerDecisionInputSchema } from "./approval-contracts";
 import { queueIntentView } from "./queue-service";
+import { rescheduleBinding } from "./reschedule-policy";
 
 type Input = z.infer<typeof prepareActionInputSchema>;
 type PublicationInput = Exclude<Input, { mode: "cancel" }>;
@@ -80,9 +81,11 @@ export function createActionService(deps: ActionDependencies) {
     const dto = projectControlConfig(config, deps.environmentValue);
     if (input.mode === "publish" || input.mode === "schedule") return { dto, content: input.content, ids: input.targetIds, scheduleRevision: null };
     const { post, schedule } = retainedSchedule(config, input.scheduleId, input.expectedRevision);
+    const queueBinding = rescheduleBinding(post, deps.readRecords());
+    if (!queueBinding) throw new ControlError("revision_conflict");
     const rawContent = { title: post.title ?? "", text: post.text ?? "", linkUrl: post.linkUrl || post.url || "", mediaId: post.media?.id ?? null };
     return { dto, content: normalizeControlContent(rawContent), ids: schedule.targets.map((target) => target.id), scheduleRevision: schedule.revision,
-      scheduledFor: schedule.scheduledFor, queueBinding: payloadDigest(post) };
+      scheduledFor: schedule.scheduledFor, queueBinding };
   }
   function relevantDraft(config: ControlReadConfig, content: ControlContent, ids: string[], mediaDigest: string | null) {
     const dto = projectControlConfig(config, deps.environmentValue);
@@ -213,7 +216,7 @@ export function createActionService(deps: ActionDependencies) {
             const post = latest.scheduledPosts.find((item) => item.id === payload.scheduleId);
             if (!post || !["scheduled", "failed"].includes(post.status)
               || projectControlSchedule(post, projectControlConfig(latest, deps.environmentValue)).revision !== action.payload.expectedRevision
-              || payloadDigest(post) !== record.scheduleBinding) throw new ControlError("action_conflict");
+              || rescheduleBinding(post, deps.readRecords().filter((item) => item.action.id !== action.id)) !== record.scheduleBinding) throw new ControlError("action_conflict");
           }
           safeView(record, latest); return latest;
         } catch (error) {

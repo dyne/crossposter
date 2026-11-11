@@ -11,6 +11,7 @@ const writes: Array<{ url: string; method: string; body: unknown }> = [];
 function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status }); }
 beforeEach(() => {
   posts = calendarPosts(); failure = ""; writes.length = 0;
+  posts[1] = { ...posts[1], id: "later/id" };
   vi.spyOn(Date, "now").mockReturnValue(Date.parse(calendarNow));
   vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -42,7 +43,7 @@ it("preserves queue filtering, status-before-time ordering, invalid-date counts 
   await mount();
   expect(screen.getByLabelText("Scheduler counts")).toHaveTextContent("3 scheduled1 publishing1 failed");
   expect(Array.from(document.querySelectorAll(".scheduled-card h3")).map((e) => e.textContent)).toEqual(["Publishing fixture", "Due fixture", "Later scheduled fixture", "Check uncertain result"]);
-  expect(within(card("Check uncertain result")).getByText("Result: 0/1 ok · 1 check")).toBeVisible();
+  expect(within(card("Check uncertain result")).getByText("1 outcome unknown")).toBeVisible();
   expect(within(card("Publishing fixture")).queryByRole("button", { name: "Discard" })).toBeNull();
   expect(screen.queryByText("Hidden invalid time")).toBeNull();
 });
@@ -66,7 +67,7 @@ it.each([
   ["2026-10-25T01:30:00.000Z", "2026-10-25", "2026-10-25"]
 ])("groups %s on its browser-local day and submits the original instant", async (instant, berlin, utc) => {
   const key = Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Berlin" ? berlin : utc;
-  posts = [{ ...posts[0], scheduledFor: instant }];
+  posts = [{ ...posts[1], scheduledFor: instant }];
   const { default: Page } = await import("@/app/scheduled/page");
   render(<Page />);
   await waitFor(() => expect(screen.queryByText("Loading scheduled posts")).toBeNull());
@@ -78,17 +79,17 @@ it.each([
     fireEvent.click(screen.getByRole("button", { name: new Date(heading).getTime() > targetMonth.getTime() ? "Previous month" : "Next month" }));
   }
   fireEvent.click(screen.getByRole("button", { name: `${month}/${day}/${year}: 1 post` }));
-  const item = card("Check uncertain result");
+  const item = card("Later scheduled fixture");
   expect(within(item).getByText(new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(instant)))).toBeVisible();
   fireEvent.click(within(item).getByRole("button", { name: "Save timing" }));
   await screen.findByText("Schedule timing updated.");
   // Ambiguous autumn input uses JS's earlier occurrence, even if the original was later.
   const expected = instant === "2026-10-25T01:30:00.000Z" && Intl.DateTimeFormat().resolvedOptions().timeZone === "Europe/Berlin" ? "2026-10-25T00:30:00.000Z" : instant;
-  expect(writes[0]).toEqual({ url: "/api/scheduled/failed%2Fid", method: "PATCH", body: { scheduledFor: expected } });
+  expect(writes[0]).toEqual({ url: "/api/scheduled/later%2Fid", method: "PATCH", body: { scheduledFor: expected } });
 });
 
 it("retains edits across refresh, including server reschedules, and sends browser-local edits as UTC", async () => {
-  await mount(); const item = card("Check uncertain result");
+  await mount(); const item = card("Later scheduled fixture");
   const input = within(item).getByLabelText("Edit timing");
   fireEvent.change(input, { target: { value: "2026-10-28T18:45" } });
   posts = posts.map((post) => ({ ...post, scheduledFor: "2026-10-28T20:00:00.000Z" }));
@@ -101,14 +102,14 @@ it("retains edits across refresh, including server reschedules, and sends browse
 });
 
 it("rejects empty timing without a request and discards by encoded ID", async () => {
-  await mount(); const item = card("Check uncertain result");
+  await mount(); const item = card("Later scheduled fixture");
   fireEvent.change(within(item).getByLabelText("Edit timing"), { target: { value: "" } });
   fireEvent.click(within(item).getByRole("button", { name: "Save timing" }));
   await screen.findByText("Choose a valid scheduled time."); expect(writes).toHaveLength(0);
-  posts = posts.filter((post) => post.id !== "failed/id");
+  posts = posts.filter((post) => post.id !== "later/id");
   fireEvent.click(within(item).getByRole("button", { name: "Discard" }));
-  await screen.findByText("Scheduled post discarded."); expect(screen.queryByText("Check uncertain result")).toBeNull();
-  expect(writes[0]).toEqual({ url: "/api/scheduled/failed%2Fid", method: "DELETE", body: null });
+  await screen.findByText("Scheduled post discarded."); expect(screen.queryByText("Later scheduled fixture")).toBeNull();
+  expect(writes[0]).toEqual({ url: "/api/scheduled/later%2Fid", method: "DELETE", body: null });
 });
 
 it.each(["http", "transport", "non-error"] as const)("shows initial fetch %s failure and clears loading", async (kind) => {
@@ -118,7 +119,7 @@ it.each(["http", "transport", "non-error"] as const)("shows initial fetch %s fai
 });
 
 it.each(["Save timing", "Discard"])("keeps data/edit state on %s HTTP and transport failures and releases busy state", async (action) => {
-  await mount(); const item = card("Check uncertain result");
+  await mount(); const item = card("Later scheduled fixture");
   failure = "http"; fireEvent.click(within(item).getByRole("button", { name: action }));
   await screen.findByText("Fixture denied Try later"); expect(within(item).getByRole("button", { name: action })).toBeEnabled();
   failure = "transport"; fireEvent.click(within(item).getByRole("button", { name: action }));

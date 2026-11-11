@@ -30,6 +30,7 @@ const queuedPost = z.object({ ...storedContent, id: z.string().min(1).max(180),
   createdAt: timestampSchema, updatedAt: timestampSchema, scheduledFor: timestampSchema,
   status: z.enum(["scheduled", "publishing", "published", "failed", "canceled"]),
   attempts: z.number().int().nonnegative(), results: z.array(storedResult).max(30).optional(),
+  lastError: z.string().optional(), publishedAt: timestampSchema.optional(),
   publishedPostId: z.string().min(1).max(180).optional(),
   authorization: z.strictObject({ actionId: idSchema, payloadDigest: digestSchema }).optional() });
 const profile = z.object({ id: z.string().min(1).max(120), label: z.string().min(1).max(180),
