@@ -145,25 +145,14 @@ describe("scheduled item routes", () => {
   });
 });
 
-describe("GET-triggered scheduled publishing", () => {
-  it("runs due publishing before returning the collection, with timer startup disabled", async () => {
-    const providers = await successfulProviders();
-    await saveConfig({ scheduledPosts: [scheduledPost({ scheduledFor: now })] });
-    const { GET } = await import("@/app/api/scheduled/route");
-    const response = await GET(new Request("http://localhost/api/scheduled"));
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ scheduledPosts: [] });
-    expect(providers.bluesky).toHaveBeenCalledTimes(1);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it.each(["GET", "POST"] as const)("returns stable tick counts for %s and uses the forwarded origin", async (method) => {
+describe("explicit scheduled publishing", () => {
+  it("returns stable POST tick counts and uses the forwarded origin, with timer startup disabled", async () => {
     const providers = await successfulProviders();
     const { saveUploadedMedia } = await import("@/lib/media-store");
     const media = await saveUploadedMedia(imageFile(), "http://localhost");
     await saveConfig({ scheduledPosts: [scheduledPost({ scheduledFor: now, media })] });
     const route = await import("@/app/api/scheduled/tick/route");
-    const response = await route[method](new Request("http://localhost/api/scheduled/tick", { method, headers: { "x-forwarded-host": "fixture.test:2004", "x-forwarded-proto": "https" } }));
+    const response = await route.POST(new Request("http://localhost/api/scheduled/tick", { method: "POST", headers: { "x-forwarded-host": "fixture.test:2004", "x-forwarded-proto": "https" } }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, processed: 1, skipped: false });
     expect(providers.bluesky).toHaveBeenCalledTimes(1);

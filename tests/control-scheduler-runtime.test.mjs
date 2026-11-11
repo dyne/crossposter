@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -30,6 +30,10 @@ async function assertClosed(port) {
 async function fixture() {
   assert.ok(existsSync(path.join(repository, ".next/BUILD_ID")), "build before production scheduler tests");
   const root = mkdtempSync(path.join(tmpdir(), "crossposter-scheduler-runtime-"));
+  const evidenceParent = process.env.CROSSPOSTER_TEST_EVIDENCE_DIR || path.join(repository, "test-results/control-scheduler");
+  mkdirSync(evidenceParent, { recursive: true });
+  const evidence = mkdtempSync(path.join(evidenceParent, "scheduler-"));
+  writeFileSync(path.join(evidence, "process.log"), "");
   const app = path.join(root, "app"), data = path.join(root, "data"); mkdirSync(app); mkdirSync(data); mkdirSync(path.join(app, "bin"));
   for (const entry of [".next", "node_modules", "public"]) symlinkSync(path.join(repository, entry), path.join(app, entry), "dir");
   copyFileSync(path.join(repository, "bin/crossposter.mjs"), path.join(app, "bin/crossposter.mjs"));
@@ -44,22 +48,28 @@ async function fixture() {
   const events = () => { const filename = path.join(data, "fixture-scheduler-events.jsonl"); return existsSync(filename) ? readFileSync(filename, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []; };
   const calls = () => events().filter((event) => event.event === "provider-entered");
   const read = async (route) => { const response = await fetch(`${origin}/api/mcp/v1/${route}`, { headers: machine }); assert.equal(response.status, 200); return (await response.json()).data; };
-  async function start({ disabled = false, fromDotEnv = false, selectedPort = port } = {}) {
+  async function start({ disabled = false, fromDotEnv = false, selectedPort = port, raw = false } = {}) {
     if (fromDotEnv) writeFileSync(path.join(data, ".env"), "POSTER_DISABLE_SCHEDULER=true\n");
     const selectedOrigin = `http://127.0.0.1:${selectedPort}`;
-    const child = spawn(process.execPath, [path.join(app, "bin/crossposter.mjs"), "--host", "127.0.0.1", "--port", String(selectedPort), "--data-dir", data, "--no-open", "--no-update"], {
+    const args = raw
+      ? [path.join(app, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(selectedPort)]
+      : [path.join(app, "bin/crossposter.mjs"), "--host", "127.0.0.1", "--port", String(selectedPort), "--data-dir", data, "--no-open", "--no-update"];
+    const child = spawn(process.execPath, args, {
       cwd: app, env: { ...baseEnv, CROSSPOSTER_APP_ROOT: app, CROSSPOSTER_DATA_DIR: data, CROSSPOSTER_RUN_MODE: "production",
         CROSSPOSTER_SCHEDULER_FIXTURE_ORIGIN: selectedOrigin, NODE_OPTIONS: `--import=${path.join(repository, "tests/control-scheduler-guard.mjs")}`,
         ...(fromDotEnv ? {} : { POSTER_DISABLE_SCHEDULER: disabled ? "true" : "false" }) }, stdio: ["pipe", "pipe", "pipe"]
     });
     const processState = { child, exited: once(child, "exit"), port: selectedPort, origin: selectedOrigin }; owned.push(processState);
-    for (const stream of [child.stdout, child.stderr]) stream.on("data", (bytes) => { output = (output + bytes).slice(-30000); });
+    for (const stream of [child.stdout, child.stderr]) stream.on("data", (bytes) => {
+      appendFileSync(path.join(evidence, "process.log"), bytes); output = (output + bytes).slice(-30000);
+    });
     await until(async () => {
       if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Owned launcher exited before readiness: ${output}`);
       try { return (await fetch(`${selectedOrigin}/api/mcp/v1/status`, { headers: machine })).status === (selectedPort === port ? 200 : 403); } catch { return false; }
     }, "actual launcher/Next ready");
-    const spawned = events().find((event) => event.pid === child.pid && event.event === "backend-spawned"); assert.ok(spawned);
-    processState.backendPid = spawned.childPid; return processState;
+    const spawned = events().find((event) => event.pid === child.pid && event.event === "backend-spawned");
+    if (!raw) assert.ok(spawned);
+    processState.backendPid = raw ? child.pid : spawned.childPid; return processState;
   }
   async function stop(processState, backendSignal) {
     if (!processState || processState.child.exitCode !== null || processState.child.signalCode !== null) return;
@@ -92,14 +102,23 @@ async function fixture() {
   }
   const release = () => writeFileSync(path.join(data, "fixture-scheduler-release"), "fixture release");
   async function dispose() {
-    release();
-    for (const client of clients) { if (client.child.exitCode === null && client.child.signalCode === null) { client.child.stdin.end(); await within(client.exited); } }
-    for (const processState of owned) await stop(processState);
-    for (const secret of [credential.token, password, "scheduler-fixture-api-key"]) assert.equal(output.includes(secret), false);
-    assert.equal(events().some((event) => event.event.startsWith("denied-")), false, "all unexpected network/process IO stays denied");
+    try {
+      release();
+      for (const client of clients) { if (client.child.exitCode === null && client.child.signalCode === null) { client.child.stdin.end(); await within(client.exited); } }
+      for (const processState of owned) await stop(processState);
+      for (const secret of [credential.token, password, "scheduler-fixture-api-key"]) assert.equal(output.includes(secret), false);
+      assert.equal(events().some((event) => event.event.startsWith("denied-")), false, "all unexpected network/process IO stays denied");
+      assert.equal(events().some((event) => event.event === "ping" && event.route === "/api/scheduled/tick" && event.method !== "POST"), false);
+      assert.equal(events().some((event) => event.event === "request" && !event.route.startsWith("/api/")), false, "no dashboard/browser request owns scheduling");
+    } finally {
+      writeFileSync(path.join(evidence, "events.json"), JSON.stringify(events(), null, 2));
+      writeFileSync(path.join(evidence, "cleanup.json"), JSON.stringify({ observedAt: new Date().toISOString(), attachments: clients.length,
+        processes: owned.map(({ child, backendPid }) => ({ pid: child.pid, backendPid, exit: child.exitCode, signal: child.signalCode })) }, null, 2));
+      console.log(`Scheduler evidence: ${evidence}`);
+    }
     rmSync(root, { recursive: true, force: true });
   }
-  return { root, data, port, origin, machine, events, calls, read, start, stop, accepted, attachment, release, dispose };
+  return { root, data, port, origin, machine, events, calls, read, start, stop, accepted, attachment, attachmentCount: () => clients.length, release, dispose };
 }
 
 test("headless launcher starts scheduling without a dashboard, survives attachment EOF and shares one owner during overlapping ticks", { timeout: 30000 }, async () => {
@@ -127,6 +146,28 @@ test("headless launcher starts scheduling without a dashboard, survives attachme
   } finally { await f.dispose(); }
 });
 
+test("raw next start stays passive under overdue GET polling until an explicit POST tick, without any client attachment", { timeout: 20000 }, async () => {
+  const f = await fixture();
+  try {
+    const backend = await f.start({ raw: true }); const action = await f.accepted("raw-passive", 1000); f.release(); await pause(1250);
+    const filename = path.join(f.data, "poster.config.local.json"), journal = path.join(f.data, ".poster-actions.json");
+    const before = [filename, journal].map((file) => readFileSync(file, "utf8"));
+    for (let poll = 0; poll < 3; poll++) {
+      const collection = await fetch(`${f.origin}/api/scheduled`); assert.equal(collection.status, 200);
+      assert.equal((await collection.json()).scheduledPosts[0].status, "scheduled");
+      const tick = await fetch(`${f.origin}/api/scheduled/tick`); assert.equal(tick.status, 405); assert.equal(tick.headers.get("allow"), "POST");
+    }
+    assert.deepEqual([filename, journal].map((file) => readFileSync(file, "utf8")), before);
+    assert.equal(f.calls().length, 0); assert.equal(f.events().some((event) => ["interval-started", "ping"].includes(event.event)), false);
+    const dispatched = await fetch(`${f.origin}/api/scheduled/tick`, { method: "POST" }); assert.equal((await dispatched.json()).processed, 1);
+    assert.equal((await f.read(`actions/${action.id}`)).state, "succeeded");
+    await until(() => f.events().filter((event) => event.event === "interval-fired").length >= 2, "POST starts the existing backend timer");
+    assert.equal(f.calls().length, 1); assert.equal(f.attachmentCount(), 0);
+    await f.stop(backend); assert.equal(existsSync(path.join(f.data, ".poster-owner.json")), false);
+    assert.equal(f.events().find((event) => event.pid === backend.backendPid && event.event === "exit").activeIntervals, 0);
+  } finally { await f.dispose(); }
+});
+
 for (const fromDotEnv of [false, true]) test(`scheduler disable from ${fromDotEnv ? "data .env" : "environment"} stops automatic ticks while explicit ticks remain available`, { timeout: 20000 }, async () => {
   const f = await fixture();
   try {
@@ -147,6 +188,12 @@ test("a separately restarted headless backend catches up an accepted overdue job
     const restarted = await f.start(); assert.notEqual(restarted.backendPid, first.backendPid);
     await until(async () => (await f.read(`actions/${action.id}`)).state === "succeeded", "overdue catch-up from launcher warmup");
     assert.equal(f.calls().length, 1); assert.equal(f.calls()[0].pid, restarted.backendPid);
+    await f.stop(restarted); assert.equal(existsSync(path.join(f.data, ".poster-owner.json")), false);
+    const settled = await f.start();
+    await until(() => f.events().filter((event) => event.pid === settled.backendPid && event.event === "interval-fired").length >= 2, "successful action inspected across a further headless restart");
+    assert.equal((await f.read(`actions/${action.id}`)).state, "succeeded");
+    assert.equal((await f.read(`posts/action-${action.id}`)).state, "succeeded");
+    assert.equal(f.calls().length, 1); assert.equal(f.attachmentCount(), 0);
   } finally { await f.dispose(); }
 });
 
@@ -159,5 +206,6 @@ test("production scheduled dispatch interrupted by backend death recovers uncert
     const recovered = await f.read(`actions/${action.id}`); assert.equal(recovered.state, "uncertain"); assert.equal(recovered.outcomes[0].state, "uncertain");
     assert.equal((await f.read(`posts/${recovered.postId}`)).state, "uncertain"); assert.equal(f.calls().length, 1);
     assert.equal(JSON.parse(readFileSync(path.join(f.data, ".poster-owner.json"), "utf8")).pid, restarted.backendPid);
+    assert.equal(f.attachmentCount(), 0);
   } finally { await f.dispose(); }
 });

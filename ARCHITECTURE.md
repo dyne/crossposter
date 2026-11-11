@@ -319,12 +319,13 @@ results. Overdue entries never claimed remain eligible for catch-up. Post reads
 also use scheduled action IDs when compatible history is unavailable.
 There is no external exactly-once guarantee. Cross-process ownership applies
 only to control-enabled operation. The disable flag prevents starting a timer,
-not explicit ticks; collection GET still ticks. JSON/media writes have no
-transaction/rollback guarantee with a provider. See the controlled interleavings
+not explicit POST ticks. Collection GET only projects the queue, and tick GET
+returns 405 with `Allow: POST`; neither starts a timer or dispatches work.
+JSON/media writes have no transaction/rollback guarantee with a provider. See the controlled interleavings
 in [scheduler tests](tests/app/scheduler.test.ts).
 
 The incumbent launcher starts scheduling without a dashboard request: its
-five-second warmup and thirty-second pings reach the backend tick, which starts
+five-second warmup and thirty-second POST pings reach the backend tick, which starts
 the shared thirty-second backend timer. Build first, then run a separate
 persistent loopback process with
 `CROSSPOSTER_RUN_MODE=production node bin/crossposter.mjs --host 127.0.0.1 --no-open --no-update --data-dir /absolute/data`.
@@ -334,10 +335,20 @@ stops automatic launcher and backend ticks; an explicit tick remains available.
 SIGTERM/SIGINT stop the backend timer while tracked execution settles. Restart
 uses the same durable root claim and conservative queue recovery.
 
+External tick callers, including cron jobs, must use POST, for example
+`curl --fail --request POST http://127.0.0.1:2004/api/scheduled/tick` against
+the configured backend origin. Existing middleware and backend ownership checks
+still apply; collection polling and tick GET requests do not initiate scheduling.
+Raw `npm start` / `next start` needs this explicit POST tick setup for unattended
+scheduling. The persistent launcher supplies it automatically; neither a
+dashboard nor a browser/MCP attachment owns that lifecycle. The disable flag
+also leaves an already-running backend timer intact.
+
 Valid title-only Dribbble/Pinterest schedules now survive storage, including
-mixed selections of title-only platforms. Other preserved disagreements include
-first-target limits for duplicate platforms on legacy routes, malformed JSON rejection order,
-and original composer hydration/conversion completion ordering. The full table
+mixed selections of title-only platforms. Validation checks every selected
+account independently of order; normalization derives unique platform summaries
+without collapsing account targets. Draft hydration and media conversion retain
+newer user edits. Malformed JSON rejection order remains characterized. The full table
 and regression links are in [characterization.md](tests/app/characterization.md).
 Calendar display uses browser-local days and UTC wire timestamps; test Berlin
 DST and UTC explicitly rather than substituting local-time parsing.

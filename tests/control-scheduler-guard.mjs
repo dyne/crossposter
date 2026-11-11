@@ -40,10 +40,12 @@ if (role === "launcher") {
   const fetch = globalThis.fetch;
   globalThis.fetch = async (input, options) => {
     const url = new URL(input);
-    if (url.origin !== process.env.CROSSPOSTER_SCHEDULER_FIXTURE_ORIGIN || !["/api/health", "/api/scheduled/tick"].includes(url.pathname)) {
+    const method = options?.method ?? "GET";
+    if (url.origin !== process.env.CROSSPOSTER_SCHEDULER_FIXTURE_ORIGIN
+      || !(url.pathname === "/api/health" && method === "GET" || url.pathname === "/api/scheduled/tick" && method === "POST")) {
       record({ event: "denied-fetch" }); throw new Error("Unexpected scheduler fixture launcher network");
     }
-    record({ event: "ping", route: url.pathname }); return fetch(input, options);
+    record({ event: "ping", method, route: url.pathname }); return fetch(input, options);
   };
   syncBuiltinESMExports();
 } else {

@@ -168,7 +168,7 @@ describe("GET /api/scheduled", () => {
       scheduledPost({ id: "hidden", status: "published" })
     ] });
     const { GET } = await import("@/app/api/scheduled/route");
-    const response = await GET(new Request("http://localhost/api/scheduled"));
+    const response = await GET();
     expect(response.status).toBe(200);
     expect((await response.json()).scheduledPosts.map((post: { id: string }) => post.id)).toEqual(["failed", "busy", "old"]);
     expect(vi.getTimerCount()).toBe(0);

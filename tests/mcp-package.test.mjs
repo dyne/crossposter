@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -67,7 +67,10 @@ test("actual npm tarball preserves runtime/bridge/launcher bytes, excludes priva
         POSTER_ADMIN_PASSWORD: owner, CROSSPOSTER_TIMEZONE: "Europe/Berlin",
         CROSSPOSTER_SCHEDULER_FIXTURE_ORIGIN: origin, NODE_OPTIONS: `--import=${path.join(repository, "tests/control-scheduler-guard.mjs")}` }, stdio: ["pipe", "pipe", "pipe"] });
     exited = once(child, "exit"); let output = "";
-    for (const stream of [child.stdout, child.stderr]) stream.on("data", (bytes) => { output = (output + bytes).slice(-16384); });
+    writeFileSync(path.join(evidence, "backend.log"), "");
+    for (const stream of [child.stdout, child.stderr]) stream.on("data", (bytes) => {
+      appendFileSync(path.join(evidence, "backend.log"), bytes); output = (output + bytes).slice(-16384);
+    });
     let ready = false;
     for (let attempt = 0; attempt < 100; attempt++) {
       assert.equal(child.exitCode, null, "packaged launcher remains alive before readiness");
@@ -104,12 +107,20 @@ test("actual npm tarball preserves runtime/bridge/launcher bytes, excludes priva
     assert.equal(child.exitCode, null); assert.equal(output.includes(credential.token), false);
     const events = readFileSync(path.join(data, "fixture-scheduler-events.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
     assert.equal(events.some((event) => event.event.startsWith("denied-")), false);
+    const pings = events.filter((event) => event.event === "ping" && event.route === "/api/scheduled/tick");
+    assert.ok(pings.length > 0); assert.ok(pings.every((event) => event.method === "POST"), "packaged launcher dispatch requests are explicit POSTs");
+    assert.equal(events.some((event) => event.event === "request" && !event.route.startsWith("/api/")), false, "no dashboard request starts the packaged scheduler");
     const dispatched = events.filter((event) => event.event === "provider-entered"); assert.equal(dispatched.length, 1); assert.ok(dispatched[0].at >= disconnectedAt);
     assert.equal(output.includes(owner), false); assert.equal(output.includes("scheduler-fixture-api-key"), false);
     const stopped = exited; child.kill("SIGTERM"); await within(stopped, 6000); child = undefined;
+    const settledEvents = readFileSync(path.join(data, "fixture-scheduler-events.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    const exits = settledEvents.filter((event) => event.event === "exit");
+    assert.equal(exits.length, 2); assert.ok(exits.every((event) => event.activeIntervals === 0), "launcher and backend release owned timers");
+    assert.equal(existsSync(path.join(data, ".poster-owner.json")), false);
+    writeFileSync(path.join(evidence, "scheduler-events.json"), JSON.stringify(settledEvents, null, 2));
     writeFileSync(path.join(evidence, "manifest.json"), JSON.stringify({ tarball: path.join(evidence, listing.filename), tarballSha256: hash(readFileSync(tarball)), files,
       lockSha256: hash(readFileSync(path.join(repository, "package-lock.json"))), sdk: "server/client/core2.4.0", negotiated: ["2025-11-25", "2026-07-28"],
-      checks: "all runtime source/dist/launcher bytes matched; fresh locked install/build; packaged launcher and MCP from different cwd; approved schedule dispatches once after all MCP clients exit, provider IO intercepted", disconnectedAt, providerDispatchedAt: dispatched[0].at,
+      checks: "all runtime source/dist/launcher bytes matched; fresh locked install/build; packaged launcher POST ticks and MCP from different cwd; approved schedule dispatches once after all MCP clients exit, provider IO intercepted; no dashboard request; launcher/backend timers and owner released", disconnectedAt, providerDispatchedAt: dispatched[0].at,
       cleanup: "both executables stopped and awaited" }, null, 2));
     console.log(`Package audit: ${files.length} delivered files matched; retained manifest ${path.join(evidence, "manifest.json")}`);
   } finally { await bridge?.close(); await stopOwned(child, exited); rmSync(root, { recursive: true, force: true }); }
