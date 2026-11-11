@@ -23,8 +23,16 @@ npm run test:mcp-package
 On a fresh Linux CI host, use `npx playwright install --with-deps chromium` to
 install browser system dependencies too. The pull-request workflow runs these
 checks on Node 22, with read-only repository permissions and no publishing or
-account credentials. Failed commands fail the job. Coverage, browser JSON results
-and failure traces/screenshots are retained for seven days as `test-evidence`.
+account credentials. After building and installing Chromium, it runs the
+control-runtime, e2e, MCP and actual-package gates sequentially in the same
+20-minute job. Each added runtime/MCP/package step has a five-minute limit.
+Failed commands fail the job; subsequent gates run only if preceding steps
+succeed. The artifact upload runs even after failure. Coverage, browser JSON
+results, failure traces/screenshots, visual captures, runtime/MCP command logs
+and the package audit are retained for seven days as `test-evidence`.
+Command logs live in `output/ci/`, outside Playwright's cleaned `test-results/`
+directory; package step logs/manifests and the tarball live under
+`test-results/mcp-package/`. Visual captures live under `output/playwright/`.
 The separate tag-triggered release workflow retains its existing authorization.
 
 Coverage includes **all** production TypeScript/TSX under `app/`, `lib/` and
@@ -59,8 +67,33 @@ installation and run:
 ```bash
 npm ci --cache /tmp/crossposter-npm-cache
 PLAYWRIGHT_BROWSERS_PATH=/tmp/crossposter-playwright-browsers npx playwright install chromium
+PLAYWRIGHT_BROWSERS_PATH=/tmp/crossposter-playwright-browsers npm run test:control-runtime
 PLAYWRIGHT_BROWSERS_PATH=/tmp/crossposter-playwright-browsers npm run test:e2e
 ```
+
+The cache override must be identical at installation and at both browser-using
+gates. An installed system Chrome alone does not satisfy Playwright's pinned
+Chromium/headless-shell lookup. Build first, including when using the cache
+commands above; do not skip a failed browser launch.
+
+Run the runtime, e2e, MCP and package gates sequentially. Control/MCP fixtures
+allocate loopback ports; e2e owns port 4173 and refuses an existing server.
+The runtime/MCP suites use the checkout's production `.next` output, so
+`npm run build` must finish before either starts. `test:mcp` rebuilds its bridge
+itself. `test:mcp-package` packs the actual tarball, extracts it, supplies the
+checkout lockfile (npm excludes it from the package), runs a fresh locked
+development install and production build, then exercises both executables.
+It needs `tar`, writable temporary storage and the locked npm dependencies
+available from cache or the registry; its single test has a 180-second deadline
+and each package build/install subprocess has a 100-second deadline.
+
+Package evidence defaults to `test-results/mcp-package/audit-*` and includes
+the tarball, byte manifest and timestamped command logs even on failure.
+Set `CROSSPOSTER_TEST_EVIDENCE_DIR` to a writable retained directory to relocate
+it. Capture each gate's stdout/stderr and exit code outside the disposable
+fixture roots. Fixtures stop/await their owned children and remove their
+temporary data in cleanup; retained evidence is deliberately separate.
+No personal configuration, account login or provider credentials are needed.
 
 Unit/component tests use the isolation helpers described in
 [app/README.md](app/README.md). They exercise real TypeScript route, runner,
