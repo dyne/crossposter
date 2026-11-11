@@ -88,6 +88,7 @@ function canPublishWithoutText(value: RequestContent): boolean {
 export function targetLimitInput(target: PublishTarget, getConfigValue: ConfigValueLookup) {
   return {
     platform: target.platform,
+    profileId: target.profileId,
     profileLabel: target.profileLabel,
     xPremium: target.platform === "x" && getConfigValue("X_PREMIUM_LONG_POSTS", target.profileId) === "true"
   };

@@ -158,15 +158,15 @@ export function platformLabel(platform: Platform): string {
   return platformLabels[platform];
 }
 
-function limitTargetLabel(target: { platform: Platform; profileLabel?: string }): string {
+function limitTargetLabel(target: { platform: Platform; profileId?: string; profileLabel?: string }): string {
   const label = platformLabel(target.platform);
-  const profileLabel = target.profileLabel?.trim();
+  const profileLabel = target.profileLabel?.trim() || target.profileId;
 
   if (!profileLabel || profileLabel === label) {
     return label;
   }
 
-  return target.platform === "x" ? `${label} · ${profileLabel}` : label;
+  return `${label} · ${profileLabel}`;
 }
 
 export function titleLimitIssues(platforms: Platform[], title: string): DraftLimitIssue[] {
@@ -201,23 +201,15 @@ export function postLimitIssues(platforms: Platform[], text: string): DraftLimit
 }
 
 export function postLimitIssuesForTargets(
-  targets: Array<{ platform: Platform; profileLabel?: string; xPremium?: boolean }>,
+  targets: Array<{ platform: Platform; profileId?: string; profileLabel?: string; xPremium?: boolean }>,
   text: string
 ): DraftLimitIssue[] {
   const textValue = text.trim();
   const length = textLength(textValue);
   const issues: DraftLimitIssue[] = [];
-  const seen = new Set<string>();
 
   for (const target of targets) {
     const key = target.platform;
-
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-
     const limit = postTextLimitForPlatform(target.platform, target.xPremium);
 
     if (limit && length > limit) {
@@ -242,5 +234,9 @@ export function postLimitIssuesForTargets(
     });
   }
 
-  return issues;
+  // Accounts can have different policies even on the same platform. Only
+  // collapse redundant diagnostics after every account has been evaluated.
+  return issues.filter((issue, index) => issues.findIndex((other) =>
+    other.id === issue.id && other.field === issue.field && other.message === issue.message
+  ) === index);
 }

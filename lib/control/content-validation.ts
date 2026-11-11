@@ -3,8 +3,8 @@ import type { PublishTarget } from "@/lib/types";
 import type { ControlContent } from "./contracts";
 
 // Structural tool validation cannot determine platform rules from opaque IDs.
-// Apply the established rules separately to every server-resolved account, so
-// the incumbent first-platform limit shortcut cannot skip a second profile.
+// Apply the established rules separately to every server-resolved account,
+// preserving strict profile configuration at the control boundary.
 export function validateResolvedContent(
   content: ControlContent, targets: PublishTarget[], getConfigValue: ConfigValueLookup
 ): { valid: boolean } {

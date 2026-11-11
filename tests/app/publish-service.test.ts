@@ -107,20 +107,24 @@ describe("publishing service with injected edges", () => {
     expect(f.appendPublishedPost).not.toHaveBeenCalled();
   });
 
-  it("uses each X profile for limit lookup and preserves first-target limit precedence", async () => {
+  it("uses each X profile for limit lookup and rejects either order before IO", async () => {
     const f = fixture();
     f.getConfigValue.mockImplementation((_name, profileId) => profileId === "premium" ? "true" : "false");
     const targets = [
       { id: "premium", platform: "x" as const, profileId: "premium", profileLabel: "Premium" },
       { id: "free", platform: "x" as const, profileId: "free", profileLabel: "Free" }
     ];
-    await f.run(publishPayload({ targets, text: "x".repeat(281) }));
-    expect(f.getConfigValue.mock.calls).toEqual([["X_PREMIUM_LONG_POSTS", "premium"], ["X_PREMIUM_LONG_POSTS", "free"]]);
-    expect(f.providers.x).toHaveBeenCalledTimes(2);
-    await expect(f.run(publishPayload({ targets: [...targets].reverse(), text: "x".repeat(281) })))
-      .rejects.toThrow("X / Twitter · Free post is 281/280");
-    expect(f.providers.x).toHaveBeenCalledTimes(2);
-    expect(f.appendPublishedPost).toHaveBeenCalledOnce();
+    for (const ordered of [targets, [...targets].reverse()]) {
+      await expect(f.run(publishPayload({ targets: ordered, text: "x".repeat(281), mediaId: "unused" })))
+        .rejects.toThrow("X / Twitter · Free post is 281/280");
+    }
+    expect(f.getConfigValue.mock.calls).toEqual([
+      ["X_PREMIUM_LONG_POSTS", "premium"], ["X_PREMIUM_LONG_POSTS", "free"],
+      ["X_PREMIUM_LONG_POSTS", "free"], ["X_PREMIUM_LONG_POSTS", "premium"]
+    ]);
+    expect(Object.values(f.providers).every((item) => item.mock.calls.length === 0)).toBe(true);
+    expect(f.getUploadedMedia).not.toHaveBeenCalled();
+    expect(f.appendPublishedPost).not.toHaveBeenCalled();
   });
 
   it("passes private media context to providers and only public fields to history/results", async () => {

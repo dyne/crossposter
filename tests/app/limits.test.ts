@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { formatLimitBytes, postLimitIssues, postLimitIssuesForTargets, textBytes, textLength, titleLimitIssues, xMediaSizeLimit } from "@/lib/platform-limits";
+import { mediaPreflightIssues } from "@/lib/compose/media-policy";
 
 describe("public publishing limits", () => {
   it("counts graphemes independently of UTF-8 bytes", () => {
@@ -19,12 +20,32 @@ describe("public publishing limits", () => {
     expect(postLimitIssues([platform], "a".repeat(limit + 1))).toHaveLength(1);
   });
 
-  it("supports X premium and uses the first target's limit for a repeated platform", () => {
+  it("checks premium and free X accounts in either order and deduplicates repeated messages", () => {
     const text = "a".repeat(281);
-    expect(postLimitIssuesForTargets([{ platform: "x", xPremium: true }, { platform: "x", xPremium: false }], text)).toEqual([]);
-    expect(postLimitIssuesForTargets([{ platform: "x", xPremium: false, profileLabel: "Free fixture" }, { platform: "x", xPremium: true }], text)[0].message).toBe("X / Twitter · Free fixture post is 281/280 characters. Shorten the post or deselect X / Twitter · Free fixture.");
+    const premium = { platform: "x" as const, xPremium: true, profileLabel: "Premium fixture" };
+    const free = { platform: "x" as const, xPremium: false, profileLabel: "Free fixture" };
+    const expected = [{ id: "x-post-limit", field: "text", message: "X / Twitter · Free fixture post is 281/280 characters. Shorten the post or deselect X / Twitter · Free fixture." }];
+    for (const targets of [[premium, free], [free, premium], [premium, free, free]]) {
+      expect(postLimitIssuesForTargets(targets, text)).toEqual(expected);
+    }
     expect(postLimitIssuesForTargets([{ platform: "x", xPremium: true }], "a".repeat(25_000))).toEqual([]);
     expect(postLimitIssuesForTargets([{ platform: "x", xPremium: true }], "a".repeat(25_001))).toHaveLength(1);
+  });
+
+  it("retains issues for separate accounts and mixed providers", () => {
+    const targets = [
+      { platform: "x" as const, profileId: "free-one" },
+      { platform: "x" as const, profileId: "free-two" },
+      { platform: "bluesky" as const, profileLabel: "Blue fixture" }
+    ];
+    const issues = postLimitIssuesForTargets(targets, "a".repeat(301));
+    expect(issues).toHaveLength(3);
+    expect(issues.map((issue) => issue.message)).toEqual([
+      expect.stringContaining("X / Twitter · free-one"),
+      expect.stringContaining("X / Twitter · free-two"),
+      expect.stringContaining("Bluesky · Blue fixture")
+    ]);
+    expect(postLimitIssuesForTargets([...targets].reverse(), "a".repeat(301))).toEqual([...issues].reverse());
   });
 
   it("applies the Dev.to body bound to bytes rather than characters", () => {
@@ -56,5 +77,16 @@ describe("public publishing limits", () => {
     expect(xMediaSizeLimit("video", "video/mp4", false)).toEqual({ bytes: 512 * 1024 ** 2, label: "X video" });
     expect(xMediaSizeLimit("video", "video/mp4", true)).toEqual({ bytes: 16 * 1024 ** 3, label: "X Premium video" });
     expect(xMediaSizeLimit("audio", "audio/mpeg", true)).toBeUndefined();
+  });
+
+  it("checks the free X video bound in either account order with mixed providers", () => {
+    const premium = { platform: "x" as const, xPremium: true };
+    const free = { platform: "x" as const, xPremium: false };
+    const file = { name: "fixture.mp4", type: "video/mp4", size: 513 * 1024 ** 2 };
+    const premiumIssues = mediaPreflightIssues([premium], file);
+    expect(premiumIssues).toEqual([]);
+    const issues = mediaPreflightIssues([premium, free, free, { platform: "youtube" }], file);
+    expect(issues).toEqual([expect.objectContaining({ id: "x-media-size", message: expect.stringContaining("512 MB") })]);
+    expect(mediaPreflightIssues([{ platform: "youtube" }, free, premium], file)).toEqual(issues);
   });
 });

@@ -124,16 +124,40 @@ describe("persisted configuration compatibility", () => {
     expect(saved.scheduledPosts.map((post) => post.id)).toEqual(["mixed"]);
   });
 
-  it("uses valid targets before platform IDs, retains duplicates and drops malformed schedules", async () => {
+  it("uses valid targets before platform IDs, summarizes their platforms and drops malformed schedules", async () => {
     const saved = await load({ scheduledPosts: [null, [], { ...schedule, scheduledFor: "bad" }, { ...schedule, platforms: [] }, { ...schedule, text: " " }, {
       ...schedule, platforms: ["hackernews"], targets: [{ platform: "bluesky" }, { platform: "bluesky", profileId: "p" }],
       media, results: [{ ...result, uncertain: true }], lastError: " error ", publishedPostId: "history", publishedAt: "not-validated"
     }] });
     expect(saved.scheduledPosts).toEqual([{
-      ...schedule, scheduledFor: "2026-01-16T12:00:00.000Z", platforms: ["bluesky", "bluesky"],
+      ...schedule, scheduledFor: "2026-01-16T12:00:00.000Z", platforms: ["bluesky"],
       targets: [{ id: "bluesky:base", platform: "bluesky" }, { id: "bluesky:p", platform: "bluesky", profileId: "p" }],
       media, results: [{ ...result, uncertain: true }], status: "scheduled", attempts: 0, lastError: " error ", publishedPostId: "history", publishedAt: "not-validated"
     }]);
+  });
+
+  it("round-trips ordered account targets with unique derived platforms and unchanged legacy selections", async () => {
+    const targets = [
+      { id: "blue-two", platform: "bluesky", profileId: "two", profileLabel: "Two" },
+      { id: "x-one", platform: "x", profileId: "one", profileLabel: "X One" },
+      { id: "blue-one", platform: "bluesky", profileId: "one", profileLabel: "One" }
+    ];
+    const saved = await load({ scheduledPosts: [
+      { ...schedule, id: "accounts", platforms: ["pinterest"], targets },
+      { ...schedule, id: "legacy", platforms: ["bluesky", "bluesky"] },
+      { ...schedule, id: "title-only", title: "Title", text: "", targets: [
+        { id: "pin-two", platform: "pinterest", profileId: "two", profileLabel: "Pin Two" },
+        { id: "dribbble", platform: "dribbble" },
+        { id: "pin-one", platform: "pinterest", profileId: "one", profileLabel: "Pin One" }
+      ] }
+    ] });
+    expect(saved.scheduledPosts[0]).toMatchObject({ platforms: ["bluesky", "x"], targets });
+    expect(saved.scheduledPosts[1]).toMatchObject({ platforms: ["bluesky", "bluesky"], targets: [] });
+    expect(saved.scheduledPosts[2]).toMatchObject({ platforms: ["pinterest", "dribbble"], text: "", title: "Title" });
+    expect(saved.scheduledPosts[2].targets?.map((target) => target.id)).toEqual(["pin-two", "dribbble", "pin-one"]);
+    const config = await import("@/lib/local-config");
+    expect(config.writeLocalConfig(saved)).toEqual(saved);
+    expect(config.readLocalConfig()).toEqual(saved);
   });
 
   it("generates missing schedule ID and timestamps, omitting absent optional fields", async () => {

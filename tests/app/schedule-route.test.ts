@@ -80,11 +80,15 @@ describe("POST /api/scheduled", () => {
     const { POST } = await import("@/app/api/scheduled/route");
     const response = await POST(scheduleRequest({ text: "a".repeat(281), platforms: ["x"], targets }));
     expect(response.status).toBe(200);
-    // Storage re-derives platforms from targets without deduplicating them.
-    expect((await response.json()).scheduledPost).toMatchObject({ platforms: ["bluesky", "bluesky"], targets });
+    const post = (await response.json()).scheduledPost;
+    expect(post).toMatchObject({ platforms: ["bluesky"], targets });
+    const { readLocalConfig, writeLocalConfig } = await import("@/lib/local-config");
+    expect(readLocalConfig().scheduledPosts).toEqual([post]);
+    writeLocalConfig(readLocalConfig());
+    expect(readLocalConfig().scheduledPosts).toEqual([post]);
   });
 
-  it("uses per-profile premium limits and first X target determines duplicate-platform validation", async () => {
+  it.each([false, true])("rejects a free X account before queue writes with premium first=%s", async (premiumFirst) => {
     await saveConfig({ profiles: { x: [
       { id: "premium", label: "Premium fixture", values: { X_PREMIUM_LONG_POSTS: "true" } },
       { id: "free", label: "Free fixture", values: { X_PREMIUM_LONG_POSTS: "false" } }
@@ -92,11 +96,16 @@ describe("POST /api/scheduled", () => {
     const premium = { id: "premium-target", platform: "x", profileId: "premium", profileLabel: "Premium fixture" };
     const free = { id: "free-target", platform: "x", profileId: "free", profileLabel: "Free fixture" };
     const { POST } = await import("@/app/api/scheduled/route");
-    const accepted = await POST(scheduleRequest({ text: "a".repeat(281), targets: [premium, free] }));
-    expect(accepted.status).toBe(200);
-    const rejected = await POST(scheduleRequest({ text: "a".repeat(281), targets: [free, premium] }));
+    const config = await import("@/lib/local-config");
+    const write = vi.spyOn(config, "upsertScheduledPost");
+    const providers = await successfulProviders();
+    const targets = premiumFirst ? [premium, free, free] : [free, free, premium];
+    const rejected = await POST(scheduleRequest({ text: "a".repeat(281), targets }));
     expect(rejected.status).toBe(400);
     expect((await rejected.json()).error).toBe("X / Twitter · Free fixture post is 281/280 characters. Shorten the post or deselect X / Twitter · Free fixture.");
+    expect(write).not.toHaveBeenCalled();
+    expect(config.getScheduledPosts()).toEqual([]);
+    expect(Object.values(providers).every((provider) => vi.mocked(provider).mock.calls.length === 0)).toBe(true);
   });
 
   it("attaches actual fixture media using the request origin", async () => {
