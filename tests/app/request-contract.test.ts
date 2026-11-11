@@ -25,7 +25,7 @@ const parityCases: ParityCase[] = [
   { name: "URL passwords are rejected", body: { linkUrl: "https://:fixture-secret@fixture.example" }, error: linkError },
   { name: "empty targets use duplicate platform defaults", body: { platforms: ["bluesky", "bluesky"], targets: [] } },
   { name: "targets override title-requiring platforms", body: { platforms: ["hackernews"], targets: [{ id: "blue", platform: "bluesky" }] } },
-  { name: "premium first permits duplicate X targets", body: { text: "a".repeat(281), targets: [premium, free] } },
+  { name: "premium first still rejects the free X target", body: { text: "a".repeat(281), targets: [premium, free] }, error: freeLimitError },
   { name: "free first rejects duplicate X targets", body: { text: "a".repeat(281), targets: [free, premium] }, error: freeLimitError },
   { name: "title-only Hacker News defaults missing text", body: { title: "Fixture title", text: undefined, platforms: ["hackernews"] }, text: "" },
   { name: "title-only Dribbble retains route acceptance", body: { title: "Fixture title", text: "", platforms: ["dribbble"] }, text: "" },
@@ -62,7 +62,7 @@ describe("publish and schedule request parity", () => {
         expect(post.linkUrl, variant).toBe(linkUrl);
         if (Array.isArray(body.platforms) && body.platforms.length === 2) {
           expect(post.targets).toEqual([{ id: "bluesky", platform: "bluesky" }, { id: "bluesky", platform: "bluesky" }]);
-          expect(post.platforms).toEqual(variant === "publish" ? ["bluesky"] : ["bluesky", "bluesky"]);
+          expect(post.platforms).toEqual(["bluesky"]);
         }
       }
     }
@@ -84,6 +84,22 @@ describe("publish and schedule request parity", () => {
 });
 
 describe("composed request variants", () => {
+  it.each([createPublishRequestSchema, createScheduleRequestSchema])("keeps title-limit field errors stable for repeated profiles and mixed providers", (createSchema) => {
+    const targets = [
+      { id: "pin-one", platform: "pinterest", profileId: "one" },
+      { id: "pin-two", platform: "pinterest", profileId: "two" },
+      { id: "dev", platform: "devto" }
+    ];
+    const schema = createSchema(() => undefined);
+    for (const ordered of [targets, [...targets].reverse()]) {
+      const parsed = schema.safeParse({ title: "a".repeat(101), text: "Fixture", targets: ordered, scheduledFor: future });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) expect(parsed.error.flatten().fieldErrors).toEqual({
+        title: ["Pinterest title is 101/100 characters. Shorten the title or deselect Pinterest."]
+      });
+    }
+  });
+
   it("keeps publish-only fields and strips them when scheduling", () => {
     const lookup = vi.fn(() => undefined);
     const payload = { text: "Fixture", platforms: ["bluesky"], scheduledFor: future, adminPassword: "fixture", mediaUrl: " fixture.example/image.png " };

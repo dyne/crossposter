@@ -71,6 +71,28 @@ describe("POST /api/publish", () => {
     expect(body.publishedPost.targets).toEqual([{ id: "bluesky", platform: "bluesky" }, { id: "bluesky", platform: "bluesky" }]);
   });
 
+  it("retains separate same-provider accounts through dispatch and history reload", async () => {
+    await saveConfig({ profiles: { bluesky: [
+      { id: "one", label: "One", values: { BLUESKY_IDENTIFIER: "one.example", BLUESKY_APP_PASSWORD: "fixture-one" } },
+      { id: "two", label: "Two", values: { BLUESKY_IDENTIFIER: "two.example", BLUESKY_APP_PASSWORD: "fixture-two" } }
+    ] } });
+    const targets = [
+      { id: "blue-two", platform: "bluesky", profileId: "two", profileLabel: "Two" },
+      { id: "blue-one", platform: "bluesky", profileId: "one", profileLabel: "One" }
+    ];
+    const { POST } = await import("@/app/api/publish/route");
+    const response = await POST(jsonRequest({ text: "Fixture", targets }));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.publishedPost).toMatchObject({ platforms: ["bluesky"], targets });
+    expect(body.results.map((result: { targetId: string }) => result.targetId)).toEqual(["blue-two", "blue-one"]);
+    const { providers } = await import("@/lib/providers");
+    expect(vi.mocked(providers.bluesky).mock.calls.map(([context]) => context.target)).toEqual(targets);
+    const config = await import("@/lib/local-config");
+    config.writeLocalConfig(config.readLocalConfig());
+    expect(config.readLocalConfig().publishedPosts).toEqual([body.publishedPost]);
+  });
+
   it("applies the selected X profile's premium override rather than the base setting", async () => {
     await saveConfig({ values: { X_PREMIUM_LONG_POSTS: "false" }, profiles: { x: [
       { id: "premium", label: "Premium fixture", values: { X_PREMIUM_LONG_POSTS: "true" } },
@@ -82,7 +104,29 @@ describe("POST /api/publish", () => {
     expect((await premium.json()).results[0]).toMatchObject({ profileId: "premium", ok: true });
     const free = await POST(jsonRequest(publishPayload({ text: "a".repeat(281), targets: [{ id: "free-target", platform: "x", profileId: "free" }] })));
     expect(free.status).toBe(400);
-    expect((await free.json()).error).toBe("X / Twitter post is 281/280 characters. Shorten the post or deselect X / Twitter.");
+    expect((await free.json()).error).toBe("X / Twitter · free post is 281/280 characters. Shorten the post or deselect X / Twitter · free.");
+  });
+
+  it.each([false, true])("rejects a free X account before any provider dispatch with premium first=%s", async (premiumFirst) => {
+    await saveConfig({ profiles: { x: [
+      { id: "premium", label: "Premium fixture", values: { X_PREMIUM_LONG_POSTS: "true" } },
+      { id: "free", label: "Free fixture", values: { X_PREMIUM_LONG_POSTS: "false" } }
+    ] } });
+    const premium = { id: "premium-target", platform: "x", profileId: "premium", profileLabel: "Premium fixture" };
+    const free = { id: "free-target", platform: "x", profileId: "free", profileLabel: "Free fixture" };
+    const blue = { id: "blue", platform: "bluesky" };
+    const targets = premiumFirst ? [blue, premium, free, free] : [free, free, premium, blue];
+    const config = await import("@/lib/local-config");
+    const write = vi.spyOn(config, "upsertScheduledPost");
+    const { POST } = await import("@/app/api/publish/route");
+    const response = await POST(jsonRequest({ text: "a".repeat(281), targets }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "X / Twitter · Free fixture post is 281/280 characters. Shorten the post or deselect X / Twitter · Free fixture." });
+    const { providers } = await import("@/lib/providers");
+    expect(Object.values(providers).every((provider) => vi.mocked(provider).mock.calls.length === 0)).toBe(true);
+    expect(write).not.toHaveBeenCalled();
+    expect(config.getScheduledPosts()).toEqual([]);
+    expect(config.readLocalConfig().publishedPosts || []).toEqual([]);
   });
 
   it.each([

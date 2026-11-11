@@ -18,7 +18,7 @@ export function normalizeScheduledPost(value: unknown, defaults: NormalizationDe
 
   const record = value as Record<string, unknown>;
   const targets = normalizePublishTargets(record.targets);
-  const platforms = targets.length ? normalizePlatforms(targets.map((target) => target.platform)) : normalizePlatforms(record.platforms);
+  const platforms = targets.length ? Array.from(new Set(targets.map((target) => target.platform))) : normalizePlatforms(record.platforms);
   const scheduledFor = stringValue(record.scheduledFor, 40);
   const scheduledAt = Date.parse(scheduledFor);
   const title = stringValue(record.title, 300);
