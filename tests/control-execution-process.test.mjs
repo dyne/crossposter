@@ -16,6 +16,7 @@ async function fixture(scheduled = false) {
     "lib/control/execution-service.ts": "execution-service", "lib/control/contracts.ts": "contracts", "lib/control/canonical.ts": "canonical",
     "lib/control/errors.ts": "errors", "lib/control/queue-service.ts": "queue-service",
     "lib/control/reschedule-policy.ts": "control-reschedule-policy", "lib/scheduling/reschedule-policy.ts": "schedule-reschedule-policy",
+    "lib/scheduling/policy.ts": "schedule-policy",
     "lib/platform-catalog.ts": "platform-catalog", "lib/storage/durable-json.ts": "durable-json", "lib/storage/json-limits.ts": "json-limits" };
   for (const [source, name] of Object.entries(sources)) {
     let compiled = ts.transpileModule(readFileSync(path.join(repository, source), "utf8"), {
