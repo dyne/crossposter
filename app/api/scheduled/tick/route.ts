@@ -16,8 +16,8 @@ async function tick(request: Request) {
   });
 }
 
-export function GET(request: Request) {
-  return tick(request);
+export function GET() {
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405, headers: { Allow: "POST" } });
 }
 
 export function POST(request: Request) {

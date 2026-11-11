@@ -19,8 +19,11 @@ the production global.
 `queries.ts` supplies the collection/item routes' visible queue ordering and
 lookup. Lists include `scheduled`, `publishing` and `failed`, newest creation
 time first; item lookup also sees hidden statuses so the existing mutation
-rejections remain intact. Collection GET still awaits a tick before returning
-the list. PATCH clears errors/results when rescheduling, retaining attempts and
+rejections remain intact. Collection GET only reads and projects the queue; it
+does not start a timer, recover interrupted work or dispatch overdue records.
+Tick GET returns 405 with `Allow: POST`; explicit POST ticks retain the guarded
+dispatch path, including when automatic timers are disabled. The launcher already
+uses POST for its warmup and periodic pings. PATCH clears errors/results when rescheduling, retaining attempts and
 history linkage; PATCH/DELETE continue to reject publishing/published entries.
 PATCH also rechecks the current queue revision after reading its request body,
 so a concurrently claimed, removed or changed entry cannot be overwritten.
@@ -79,6 +82,7 @@ overdue catch-up and interrupted recovery using fake providers and real files.
 
 `scheduler-lifecycle.test.ts` exercises fake-timer startup, hot reload, disable
 semantics, overlap, failure reentry and cleanup. `schedule-item-route.test.ts`
-tests item actions, the one-minute tolerance, GET-triggered publishing and both
-tick methods against temporary storage and fixture publishers/media. Its item
-and tick cases passed against the routes before the shared-query extraction.
+tests item actions, the one-minute tolerance and explicit POST dispatch against
+temporary storage and fixture publishers/media. `schedule-observation-route.test.ts`
+checks passive collection/tick GETs under overdue work, provider outages and
+corrupt/unavailable storage, plus POST error propagation and timer startup.

@@ -106,7 +106,7 @@ a new decision; do not prebuild those systems now.
 | Routes mix orchestration with transport in some features | `app/api/scheduled/route.ts`, `app/api/scheduled/[id]/route.ts`, `app/api/draft/route.ts` | Extract only the operations required by the new adapter. |
 | Config GET returns field values and entire profiles | `app/api/config/route.ts:48` | Never expose this payload as an account discovery tool; build a secret-free projection. |
 | Readiness currently checks configured fields, by platform | `app/api/readiness/route.ts:12` | Distinguish configured readiness from verified provider authentication and per-profile readiness. |
-| Scheduled collection GET starts and runs a tick | `app/api/scheduled/route.ts:39` | An MCP read tool cannot simply proxy this route and advertise itself as read-only. |
+| Scheduled collection GET now only projects the queue; tick GET rejects with 405 | `app/api/scheduled/route.ts`, `app/api/scheduled/tick/route.ts` | Read-triggered dispatch has been removed; MCP reads retain their dedicated bounded projections. |
 | Claiming permits already-publishing entries from stale snapshots | `lib/scheduling/service.ts:32` | Correct claim eligibility for the new operating model, with controlled interleaving regressions. |
 | Any successful schedule target causes queue removal | `lib/scheduling/service.ts:82` | Preserve per-target outcomes durably and never retry successful destinations implicitly. |
 | Provider exceptions can carry uncertainty | `lib/publishing/service.ts:112` | Surface uncertainty as structured state; never blindly retry ambiguous writes. |
@@ -367,8 +367,9 @@ there is no automatic MCP retry tool in this release. A deliberate new attempt
 requires a new preparation/approval and must exclude known successes.
 
 Read tools must remain free of dispatch effects. Do not implement
-`list_scheduled_posts` by calling today's tick-on-GET collection route, or
-`get_status` by invoking the timer-starting health route. Scheduler startup is
+`list_scheduled_posts` through a dispatching tick, or `get_status` by invoking
+the timer-starting health route. The collection GET is now passive; MCP reads
+retain their dedicated bounded projections. Scheduler startup is
 a lifecycle concern; previously authorized scheduled work can run independently.
 
 All tool results have declared output schemas, structured content, and a short

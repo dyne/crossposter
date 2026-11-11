@@ -185,14 +185,20 @@ machine-token rotation. No provider network connection is opened.
 
 `control-scheduler-runtime.test.mjs` launches the actual packaged CLI and Next
 production backend with disposable data and intercepted Dev.to IO. It checks
-startup without dashboard requests, overlapping launcher/backend ticks, one
+startup without dashboard requests, explicit POST launcher ticks, overlapping launcher/backend ticks, one
 owner with multiple HTTP attachments, attachment EOF, competing-backend refusal,
-normal shutdown, restart/overdue catch-up, interrupted dispatch, and scheduler
+normal shutdown, restart/overdue catch-up without client attachments, retained
+success across a further restart, interrupted dispatch, and scheduler
 disable from the environment/data `.env`. The attachment processes are HTTP
 stand-ins; they make no MCP stdio or Codex/Gestalt acceptance claim. A fixture-only
 preload shortens the five-second warmup to 80 ms and thirty-second intervals to 120 ms
 while executing the actual callbacks. All held providers and owned processes
 are released/awaited, fixture ports close, and no user service is installed.
+It also launches raw `next start` with timers enabled: repeated collection/tick
+GETs leave overdue queue/journal bytes unchanged and allocate no timer; an
+explicit POST dispatches once and starts the existing backend timer. The
+fixture retains timestamped scheduler events, process output and cleanup state
+under `CROSSPOSTER_TEST_EVIDENCE_DIR` (default `test-results/control-scheduler`).
 
 `approval-flows.spec.ts` covers keyboard sign-in/decision, errors, reload,
 concurrent clicks, live expiry and blocked framing. `approval-visual.spec.ts`

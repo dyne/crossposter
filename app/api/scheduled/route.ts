@@ -4,7 +4,7 @@ import { createScheduleRequestSchema, defaultTargets, requestValidationMessage }
 import { getConfigValue, getScheduledPosts, upsertScheduledPost } from "@/lib/local-config";
 import { getUploadedMedia } from "@/lib/media-store";
 import { requestOrigin } from "@/lib/request-origin";
-import { ensureSchedulerStarted, runScheduledTick } from "@/lib/scheduler";
+import { ensureSchedulerStarted } from "@/lib/scheduler";
 import { scheduledQueue } from "@/lib/scheduling/queries";
 import type { Platform, PublishedMedia, PublishTarget, ScheduledPost } from "@/lib/types";
 
@@ -27,12 +27,7 @@ function mediaSummary(media: Awaited<ReturnType<typeof getUploadedMedia>>): Publ
   };
 }
 
-export async function GET(request: Request) {
-  const tickUrl = new URL("/api/scheduled/tick", requestOrigin(request)).toString();
-
-  ensureSchedulerStarted(tickUrl);
-  await runScheduledTick(tickUrl);
-
+export async function GET() {
   return NextResponse.json({
     scheduledPosts: scheduledQueue(getScheduledPosts())
   });

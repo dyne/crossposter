@@ -108,12 +108,26 @@ history and removed from the Scheduler queue.
 The scheduler is local/self-hosted. The Crossposter server must be running at
 the scheduled time:
 
-- `npx @apoorvdarshan/crossposter@latest` pings the scheduler every 30 seconds
+- `npx @apoorvdarshan/crossposter@latest` sends explicit POST ticks after startup and every 30 seconds
 - the macOS auto-start service keeps `http://localhost:2004` alive after login
 - on Render or a VPS, keep the Node service running with persistent disk
 
 If the server is offline when a post is due, it will publish the next time the
 server starts and the scheduler tick runs.
+
+For a production source checkout, build first and use the persistent launcher:
+
+```bash
+CROSSPOSTER_RUN_MODE=production node bin/crossposter.mjs --host 127.0.0.1 --no-open --no-update --data-dir /absolute/data
+```
+
+Raw `npm start` / `next start` needs an explicit POST tick setup, such as a
+periodic `curl --fail --request POST http://127.0.0.1:2004/api/scheduled/tick`
+against the configured backend origin, subject to its existing access checks.
+Queue GET polling does not start timers or publish; tick GET returns 405.
+`POSTER_DISABLE_SCHEDULER=true` prevents automatic launcher pings and new backend
+timers, while explicit POST ticks remain available. It does not cancel a timer
+already running. No dashboard or MCP client needs to stay attached to the launcher.
 
 ## Posting From Codex / Gestalt (MCP)
 
