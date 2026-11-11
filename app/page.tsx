@@ -13,6 +13,7 @@ import { useComposerDraft } from "@/components/composer/use-composer-draft";
 import { useComposerMedia } from "@/components/composer/use-composer-media";
 import { useComposerActions } from "@/components/composer/use-composer-actions";
 import { ComposerEditor } from "@/components/composer/composer-editor";
+import { DraftStatus } from "@/components/composer/draft-status";
 import { MediaEditor } from "@/components/composer/media-editor";
 import { ChannelSelection } from "@/components/composer/channel-selection";
 import { PublishPanel } from "@/components/composer/publish-panel";
@@ -170,7 +171,7 @@ export default function Home() {
             canPublish={canSubmitDraft} canOpenSchedule={canSubmitDraft} canSchedule={canSchedule} />
 
           <div className="composer">
-            {draft.saveError ? <p className="error-line" role="alert">{draft.saveError}</p> : null}
+            <DraftStatus draft={draft} mediaStorageError={media.storageError} />
             <ComposerEditor
               title={title} text={text} linkUrl={linkUrl}
               onTitleChange={(value) => { setHasSavedDraft(true); setTitle(value); }}

@@ -596,6 +596,41 @@ h2 {
   padding: 20px;
 }
 
+.draft-status {
+  min-width: 0;
+  padding-block: 12px;
+  border-block: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.draft-status p {
+  margin: 0;
+}
+
+.draft-status p + p {
+  margin-block-start: 6px;
+}
+
+.draft-status-label {
+  font-weight: 700;
+}
+
+.draft-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 12px;
+}
+
+.draft-recovery-actions .compact-button {
+  min-height: 44px;
+  white-space: normal;
+  text-align: center;
+}
+
 .field,
 .channel-section {
   display: grid;
