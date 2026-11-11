@@ -62,7 +62,7 @@ async function fixture() {
 }
 
 describe("approved queue mutations", () => {
-  it("retains proof and history for a pre-dispatch media validation failure and a freshly approved timing change", async () => {
+  it.each([false, true])("dispatches approved recovery with retained proof after replacement pre-dispatch failure=%s", async (replacementFails) => {
     const f = await fixture(); const { saveUploadedMedia } = await import("@/lib/media-store"); const media = await saveUploadedMedia(imageFile(), origin);
     const prepared = await f.actions.prepare({ ...input, content: { ...input.content, mediaId: media.id } }); await f.approve(prepared);
     const service = f.make({ readUploadedMedia: async () => { throw new Error("Pre-dispatch media validation failed"); } });
@@ -85,6 +85,30 @@ describe("approved queue mutations", () => {
     await f.approve(next); expect((await f.make().commit(f.commit(next))).state).toBe("rescheduled");
     expect(f.getScheduledPosts()[0]).toMatchObject({ results: before.results, attempts: 1 });
     expect(f.current(prepared.id)).toEqual(original); expect(f.config().publishedPosts).toEqual(history);
+    const intent = f.current(next.id).queueIntent;
+    expect(intent).toMatchObject({ results: before.results, lastError: before.lastError, attempts: 1 });
+    vi.mocked(f.providers.bluesky).mockResolvedValue({ platform: "bluesky", ok: true, message: "Recovered fixture published" });
+    f.make(replacementFails ? { readUploadedMedia: async () => { throw new Error("Replacement pre-dispatch media failure"); } } : {});
+    vi.setSystemTime(new Date("2026-01-18T12:00:00Z"));
+    await runScheduledTick();
+    if (replacementFails) {
+      const replacement = f.current(next.id);
+      expect(replacement.action).toMatchObject({ state: "failed", outcomes: [{ state: "not_dispatched" }] });
+      expect(f.getScheduledPosts()[0]).toMatchObject({ status: "failed", attempts: 2 });
+      expect(f.providers.bluesky).not.toHaveBeenCalled();
+      const final = await f.actions.prepare({ mode: "reschedule", requestKey: "safe-after-replacement-failure", scheduleId: queued.scheduleId!, expectedRevision: await f.revision(queued.scheduleId!), scheduledFor: "2026-01-19T12:00:00Z" });
+      await f.approve(final); await f.make().commit(f.commit(final));
+      vi.setSystemTime(new Date("2026-01-19T12:00:00Z"));
+      await runScheduledTick();
+      expect(f.current(next.id)).toEqual(replacement);
+    }
+    expect(f.providers.bluesky).toHaveBeenCalledOnce();
+    expect(f.getScheduledPosts()).toEqual([]);
+    await runScheduledTick();
+    expect(f.providers.bluesky).toHaveBeenCalledOnce();
+    expect(f.current(prepared.id)).toEqual(original);
+    expect(f.current(next.id).queueIntent).toEqual(intent);
+    for (const post of history) expect(f.config().publishedPosts).toContainEqual(post);
   });
 
   it.each(["attempt-without-results", "failed-without-terminal-proof", "unexpected-attempt-count", "results-without-attempt"] as const)("refuses control timing edits for %s", async (kind) => {
@@ -400,6 +424,18 @@ describe("approved queue mutations", () => {
 });
 
 describe("scheduled target ownership and restart recovery", () => {
+  it.each(["text", "attempts", "results", "lastError"] as const)("rejects changed %s on the claimed queue before dispatch", async (field) => {
+    const f = await fixture(); const { id } = await f.queued(); vi.setSystemTime(new Date(input.scheduledFor));
+    const { claimScheduledPost } = await import("@/lib/scheduling/service");
+    const store = await import("@/lib/local-config");
+    expect(claimScheduledPost(store, id, new Date()).kind).toBe("claimed");
+    f.updateScheduledPost(id, (post) => ({ ...post, ...(field === "text" ? { text: "Changed content" }
+      : field === "attempts" ? { attempts: 1 } : field === "lastError" ? { lastError: "Unexpected error" }
+        : { results: [{ platform: "bluesky", ok: true, message: "Unexpected outcome" }] }) }));
+    await expect(f.make().dispatchScheduled(f.getScheduledPosts()[0])).rejects.toMatchObject({ code: "action_conflict" });
+    expect(f.providers.bluesky).not.toHaveBeenCalled();
+  });
+
   it.each(["missing-record", "changed-content"] as const)("stops orphaned publishing work with %s instead of invoking a legacy provider", async (kind) => {
     const f = await fixture(); const { id } = await f.queued(); vi.setSystemTime(new Date(input.scheduledFor));
     f.updateScheduledPost(id, (post) => ({ ...post, status: "publishing", ...(kind === "missing-record"

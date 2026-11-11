@@ -4,6 +4,7 @@ import { payloadDigest } from "./canonical";
 import { ControlError } from "./errors";
 import type { ControlReadConfig } from "./read-storage";
 import { rescheduleBinding } from "./reschedule-policy";
+import { publishingPost } from "@/lib/scheduling/policy";
 
 export type QueueDependencies = {
   readConfig: () => ControlReadConfig;
@@ -89,8 +90,11 @@ export function createApprovedQueue(deps: QueueDependencies) {
     assertDispatch(record: ActionRecord) {
       const post = deps.readConfig().scheduledPosts.find((item) => item.id === approvedScheduleId(record.action));
       const expected = desired(record);
+      const claimed = expected && post && publishingPost(expected, new Date(post.updatedAt));
+      // Match the durable claim: JSON storage omits the cleared error field.
+      if (claimed && claimed.lastError === undefined) delete claimed.lastError;
       if (!post || !expected || post.status !== "publishing" || Date.parse(post.scheduledFor) > deps.now().getTime()
-        || payloadDigest(post) !== payloadDigest(retained({ ...expected, status: post.status, updatedAt: post.updatedAt }))) throw new ControlError("action_conflict");
+        || !claimed || payloadDigest(post) !== payloadDigest(retained(claimed))) throw new ControlError("action_conflict");
     },
     intent(record: ActionRecord, config: ControlReadConfig): ActionRecord {
       if (record.action.payload.mode === "publish") throw new ControlError("validation_failed");
