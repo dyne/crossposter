@@ -31,7 +31,17 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      - run: mkdir -p output/ci
+      - name: Control production runtime
+        timeout-minutes: 5
+        run: npm run test:control-runtime > output/ci/control-runtime.log 2>&1
       - run: npm run test:e2e
+      - name: MCP protocol and lifecycle
+        timeout-minutes: 5
+        run: npm run test:mcp > output/ci/mcp.log 2>&1
+      - name: Actual npm package build and runtime
+        timeout-minutes: 5
+        run: npm run test:mcp-package > output/ci/mcp-package.log 2>&1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -39,4 +49,6 @@ jobs:
           path: |
             coverage/
             test-results/
+            output/ci/
+            output/playwright/
           retention-days: 7

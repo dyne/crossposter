@@ -80,12 +80,16 @@ npm run test:mcp
 npm run test:mcp-package
 ```
 
-Install Chromium once with `npx playwright install chromium` before the browser
-suite; Linux CI uses `--with-deps`. Build before running it and leave port 4173
-free. The tests use disposable data and intercepted provider/network/process
+Install Chromium once with `npx playwright install chromium` before both
+`test:control-runtime` and `test:e2e`; Linux CI uses `--with-deps`. Keep the same
+`PLAYWRIGHT_BROWSERS_PATH` for installation and both commands when overriding
+the browser cache. Build before the runtime, browser and MCP gates, and run
+them sequentially; leave port 4173 free for e2e. The tests use disposable data
+and intercepted provider/network/process
 edges; never supply account credentials or disable those guards. No required
-test may be skipped. The only existing lint warning is the anonymous default
-export in `web/worker/index.mjs`.
+test may be skipped. Existing lint warnings are two unused expressions in
+`scripts/codex-crossposter.mjs` and the anonymous default export in
+`web/worker/index.mjs`.
 
 See [the regression guide](tests/README.md) for cache options, evidence commands,
 coverage limits and visual comparisons, and [the required scenarios](tests/SCENARIOS.md)
