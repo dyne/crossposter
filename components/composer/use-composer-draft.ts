@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { ComposeDraft, PublishedMedia, PublishedPost, PublishTarget } from "@/lib/types";
 import { composeClient, fileFromDraftMedia } from "@/lib/compose/client";
 import {
@@ -19,10 +19,10 @@ type Options = {
 const message = (error: unknown) => error instanceof Error ? error.message : "Draft persistence failed";
 
 export function useComposerDraft({ availableTargets, configHydrated, hydrateMedia, clearMedia }: Options) {
-  const [title, setTitle] = useState("");
-  const [text, setText] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [title, restoreTitle] = useState("");
+  const [text, restoreText] = useState("");
+  const [linkUrl, restoreLinkUrl] = useState("");
+  const [selected, restoreSelected] = useState<string[]>([]);
   const [publishedPosts, setPublishedPosts] = useState<PublishedPost[]>([]);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
@@ -30,7 +30,24 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
   const [saveError, setSaveError] = useState("");
   const [storageError, setStorageError] = useState("");
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [saveConflict, setSaveConflict] = useState(false);
+  const [isLocalOnly, setIsLocalOnly] = useState(false);
   const [attachedMedia, setAttachedMedia] = useState<PublishedMedia>();
+  // An explicit edit (including clearing a field/selection) owns that field
+  // for the rest of initial recovery. Internal restore/normalization bypasses it.
+  const edited = useRef({ title: false, text: false, linkUrl: false, selected: false, media: false });
+  const setTitle = useCallback<Dispatch<SetStateAction<string>>>((value) => {
+    edited.current.title = true; setHasSavedDraft(true); restoreTitle(value);
+  }, []);
+  const setText = useCallback<Dispatch<SetStateAction<string>>>((value) => {
+    edited.current.text = true; setHasSavedDraft(true); restoreText(value);
+  }, []);
+  const setLinkUrl = useCallback<Dispatch<SetStateAction<string>>>((value) => {
+    edited.current.linkUrl = true; setHasSavedDraft(true); restoreLinkUrl(value);
+  }, []);
+  const setSelected = useCallback<Dispatch<SetStateAction<string[]>>>((value) => {
+    edited.current.selected = true; setHasSavedDraft(true); restoreSelected(value);
+  }, []);
   const saveState = useRef({ active: true, revision: 0, serverRevision: undefined as string | undefined,
     pending: Promise.resolve(), blocked: "" });
 
@@ -41,9 +58,12 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
       if (state.blocked) throw new Error(state.blocked);
       try {
         const response = await composeClient.saveDraft(draft, state.serverRevision);
-        if (!response.ok) throw new Error(response.status === 409
+        if (!response.ok) {
+          if (state.active) setSaveConflict(response.status === 409);
+          throw new Error(response.status === 409
           ? "Draft changed elsewhere. Reload before saving; your edits remain in this browser."
           : "Draft could not be saved. Reload before trying again; your edits remain in this browser.");
+        }
         const body = await response.json() as { revision?: string };
         if (body.revision) {
           state.serverRevision = body.revision;
@@ -54,6 +74,7 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
         // A failed response may follow a completed server write. Never guess a
         // new base or replay queued edits over another client's draft.
         state.blocked = message(error);
+        if (state.active) { setSaveError(state.blocked); setIsLocalOnly(true); }
         throw error;
       }
     });
@@ -67,44 +88,55 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
     state.active = true;
     const controller = new AbortController();
     function restore(draft: ComposeDraft) {
-      setTitle(draft.title);
-      setText(draft.text);
-      setLinkUrl(draft.linkUrl);
-      setSelected(draft.targets?.length ? draft.targets.map((target) => target.id) : draft.platforms);
-      setHasSavedDraft(draftTimestamp(draft) > 0);
+      if (!edited.current.title) restoreTitle(draft.title);
+      if (!edited.current.text) restoreText(draft.text);
+      if (!edited.current.linkUrl) restoreLinkUrl(draft.linkUrl);
+      if (!edited.current.selected) restoreSelected(draft.targets?.length ? draft.targets.map((target) => target.id) : draft.platforms);
+      setHasSavedDraft((current) => current || draftTimestamp(draft) > 0);
     }
     async function loadDraft() {
       try {
         const body = await composeClient.readDraft(controller.signal);
+        if (!active) return;
         const browserDraft = readStoredDraft();
         // A versioned backend owns the shared singleton. Browser timestamps
         // cannot silently resurrect edits made before a newer MCP save/clear.
         // A never-saved backend still accepts the existing browser migration.
         const serverSaved = Boolean(body.revision && body.draft?.updatedAt);
         const draft = serverSaved ? normalizeDraft(body.draft) : newestDraft(body.draft, browserDraft);
-        const serverMediaImport = body.draft?.media && (serverSaved || draftTimestamp(body.draft) >= draftTimestamp(browserDraft))
-          ? await fileFromDraftMedia(body.draft.media, controller.signal) : null;
         const previousRevision = readStoredDraftRevision();
         const legacySameDraft = !previousRevision && draftTimestamp(body.draft) === draftTimestamp(browserDraft)
           && JSON.stringify(normalizeDraft(body.draft)) === JSON.stringify(normalizeDraft(browserDraft));
         const recoverBrowserMedia = !serverSaved || previousRevision === body.revision || legacySameDraft;
-        const storedMedia = serverMediaImport || (recoverBrowserMedia ? await readStoredDraftMedia() : null);
-        if (!active) return;
         state.serverRevision = body.revision;
         state.blocked = "";
         if (body.revision) {
           try { writeStoredDraftRevision(body.revision); }
           catch (error) { setStorageError(message(error)); }
         }
-        setAttachedMedia(body.draft?.media);
+        if (!edited.current.media) setAttachedMedia(body.draft?.media);
         restore(draft);
         setPublishedPosts(body.publishedPosts || []);
-        hydrateMedia(storedMedia);
+        // Text and the server revision are valid independently of media IO.
+        // Keep them even if importing an attachment or IndexedDB recovery fails.
+        let storedMedia: File | null = null;
+        try {
+          const importServerMedia = body.draft?.media && (serverSaved || draftTimestamp(body.draft) >= draftTimestamp(browserDraft));
+          const serverMedia = importServerMedia ? await fileFromDraftMedia(body.draft!.media!, controller.signal) : null;
+          if (!active) return;
+          storedMedia = serverMedia || (recoverBrowserMedia ? await readStoredDraftMedia() : null);
+          if (active && importServerMedia && !storedMedia) setLoadError("Attached media could not be restored. Your draft text is available.");
+        } catch (error) {
+          if (active) setLoadError(message(error));
+        }
+        if (active) hydrateMedia(edited.current.media ? null : storedMedia);
       } catch (error) {
         if (!active) return;
-        // Preserve the existing browser recovery, including falling back to
-        // browser text when reading the attached IndexedDB media fails.
+        // Without a successful read there is no safe server revision to save
+        // against. Recover browser text, but never guess a base for a write.
         restore(normalizeDraft(readStoredDraft()));
+        state.blocked = "Draft could not be loaded. Copy or download your text before reloading.";
+        setIsLocalOnly(true);
         setLoadError(message(error));
         hydrateMedia(null);
       } finally {
@@ -117,7 +149,7 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
 
   useEffect(() => {
     if (!draftHydrated || !configHydrated) return;
-    setSelected((current) => {
+    restoreSelected((current) => {
       const ids = new Set(availableTargets.map((target) => target.id));
       const next = Array.from(new Set(current.flatMap((item) => {
         if (ids.has(item)) return [item];
@@ -127,7 +159,7 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
         }
         return [];
       })));
-      if (hasSavedDraft) return next;
+      if (hasSavedDraft || edited.current.selected) return next;
       return next.length ? next : availableTargets.slice(0, 1).map((target) => target.id);
     });
   }, [availableTargets, configHydrated, draftHydrated, hasSavedDraft]);
@@ -145,11 +177,12 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
       ...(attachedMedia ? { media: attachedMedia } : {}), updatedAt: new Date().toISOString() };
     try { writeStoredDraft(draft); setStorageError(""); }
     catch (error) { setStorageError(message(error)); }
+    if (saveState.current.blocked) { setIsSavingDraft(false); return; }
     let active = true;
     const state = saveState.current;
     state.revision++;
+    setIsSavingDraft(true);
     const timer = window.setTimeout(() => {
-      setIsSavingDraft(true);
       // Serialize writes and advance only from a successful server revision.
       // Responses never replace current editor text.
       void persistDraft(draft).then(() => {
@@ -164,6 +197,7 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
   }, [title, text, linkUrl, selected, selectedPlatforms, selectedTargets, draftHydrated, configHydrated, hasSavedDraft, attachedMedia, persistDraft]);
 
   async function clearDraft() {
+    edited.current = { title: true, text: true, linkUrl: true, selected: true, media: true };
     const draft: ComposeDraft = { title: "", text: "", linkUrl: "", platforms: [], targets: [], updatedAt: new Date().toISOString() };
     setHasSavedDraft(true);
     setTitle(""); setText(""); setLinkUrl(""); setSelected([]);
@@ -171,6 +205,7 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
     try { writeStoredDraft(draft); setStorageError(""); }
     catch (error) { setStorageError(message(error)); }
     await clearMedia();
+    if (!draftHydrated) return;
     const state = saveState.current;
     const revision = state.revision;
     await persistDraft(draft).catch((error: unknown) => {
@@ -181,7 +216,7 @@ export function useComposerDraft({ availableTargets, configHydrated, hydrateMedi
   return {
     title, setTitle, text, setText, linkUrl, setLinkUrl, selected, setSelected,
     publishedPosts, setPublishedPosts, draftHydrated, hasSavedDraft, setHasSavedDraft, clearDraft,
-    isLoadingDraft: !draftHydrated, isSavingDraft, loadError, saveError, storageError,
-    detachMedia: () => setAttachedMedia(undefined)
+    isLoadingDraft: !draftHydrated, isSavingDraft, isLocalOnly, saveConflict, loadError, saveError, storageError,
+    detachMedia: () => { edited.current.media = true; setAttachedMedia(undefined); }
   };
 }

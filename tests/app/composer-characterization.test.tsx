@@ -92,13 +92,62 @@ describe("composer behavior before lifecycle extraction", () => {
     expect(localStorage.getItem("crossposter:compose-draft:v1")).toContain("Newer browser");
   });
 
-  it("characterizes a slow initial response replacing edits made before hydration", async () => {
+  it("preserves text typed before hydration while restoring untouched fields", async () => {
     const held = deferred<Response>();
     draftGet = held.promise;
+    const view = await mount();
+    try {
+      expect(screen.getByRole("status")).toHaveTextContent("Loading draft…");
+      fireEvent.change(screen.getByLabelText("Post", { exact: true }), { target: { value: "Edited while loading" } });
+      fireEvent.click(screen.getByRole("button", { name: "None" }));
+      await act(async () => held.resolve(json({ draft: { ...draft, title: "Server title", text: "Initial server response", platforms: ["bluesky"] } })));
+      await waitFor(() => expect(screen.getByLabelText("Title", { exact: true })).toHaveValue("Server title"));
+      expect(screen.getByLabelText("Post", { exact: true })).toHaveValue("Edited while loading");
+      expect(screen.getByRole("checkbox")).not.toBeChecked();
+    } finally { held.resolve(json({ draft })); await act(async () => held.promise); view.unmount(); }
+  });
+
+  it("shows saving and conflict states and copies current text before offering reload", async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
     await mount();
-    fireEvent.change(screen.getByLabelText("Post", { exact: true }), { target: { value: "Edited while loading" } });
-    await act(async () => held.resolve(json({ draft: { ...draft, text: "Initial server response" } })));
-    await waitFor(() => expect(screen.getByLabelText("Post", { exact: true })).toHaveValue("Initial server response"));
+    const held = deferred<Response>();
+    const fetchMock = vi.mocked(fetch);
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input, init) => init?.method === "PUT" ? held.promise : original(input, init));
+    const view = screen.getByLabelText("Draft persistence");
+    try {
+      fireEvent.change(screen.getByLabelText("Title", { exact: true }), { target: { value: "My title" } });
+      fireEvent.change(screen.getByLabelText("Link", { exact: true }), { target: { value: "https://my.example" } });
+      fireEvent.change(screen.getByLabelText("Post", { exact: true }), { target: { value: "Unsaved post" } });
+      await waitFor(() => expect(view).toHaveTextContent("Saving draft…"));
+      await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => String(init?.body).includes("Unsaved post"))).toBe(true));
+      await act(async () => held.resolve(json({}, 409)));
+      await waitFor(() => expect(view).toHaveTextContent("Draft conflict"));
+      expect(screen.queryByRole("button", { name: "Reload shared draft" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Copy draft text" }));
+      await screen.findByText("Draft text copied.");
+      expect(writeText).toHaveBeenCalledWith("Title: My title\nLink: https://my.example\n\nUnsaved post");
+      expect(screen.getByRole("button", { name: "Reload shared draft" })).toBeVisible();
+      fireEvent.change(screen.getByLabelText("Post", { exact: true }), { target: { value: "Newest unsaved post" } });
+      expect(screen.queryByRole("button", { name: "Reload shared draft" })).not.toBeInTheDocument();
+      const download = screen.getByRole("link", { name: "Download text" });
+      expect(download).toHaveAttribute("download", "crossposter-draft.txt");
+      expect(decodeURIComponent(download.getAttribute("href")!)).toContain("Newest unsaved post");
+      expect(screen.getByLabelText("Post", { exact: true })).toHaveValue("Newest unsaved post");
+    } finally { held.resolve(json({}, 409)); await act(async () => held.promise); }
+  });
+
+  it("shows local-only recovery and a download fallback when clipboard access fails", async () => {
+    vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn(async () => { throw new Error("Fixture clipboard denied"); }) } });
+    draftGet = Promise.reject(new Error("Fixture offline"));
+    await mount();
+    fireEvent.change(screen.getByLabelText("Post", { exact: true }), { target: { value: "Local post" } });
+    await waitFor(() => expect(screen.getByLabelText("Draft persistence")).toHaveTextContent("Local only"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy draft text" }));
+    await screen.findByText("Copy is unavailable. Download your text or select it in the editor.");
+    expect(screen.getByRole("link", { name: "Download text" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Reload shared draft" })).not.toBeInTheDocument();
   });
 
   it("ignores save response bodies after newer edits", async () => {

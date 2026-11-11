@@ -1,8 +1,8 @@
 # Existing behavior captured before extraction
 
 These tests describe the production code at the refactor's starting commit.
-They preserve observable disagreements except the explicitly scoped title-only
-Dribbble/Pinterest persistence repair and uncertainty retention described below.
+They preserve observable disagreements except the explicitly scoped repairs
+described below. The draft lifecycle rows describe the current corrected contract.
 
 | Behavior | Current observation | Tests |
 | --- | --- | --- |
@@ -12,9 +12,9 @@ Dribbble/Pinterest persistence repair and uncertainty retention described below.
 | Duplicate schedule platform IDs | The schedule route initially deduplicates platform IDs, but persistence derives them again from targets without deduplication. Two Bluesky targets produce two Bluesky entries in the saved/returned schedule's `platforms`. Immediate history retains one platform entry and both targets. | `schedule-route.test.ts`, `publish-route.test.ts` |
 | Malformed JSON | Both POST handlers reject with `SyntaxError` before returning a schema-validation response. These direct-handler tests make no claim about Next's final wire response for an uncaught exception. Publish checks missing password configuration first and can return 500 before JSON parsing. | `publish-route.test.ts`, `schedule-route.test.ts` |
 | Password modes | Immediate publishing defaults to requiring a password in production unless explicitly disabled. Scheduling does not apply that password check. Payload validation precedes checking a supplied publish password. | `publish-route.test.ts`, `schedule-route.test.ts` |
-| Composer hydration | A slow initial draft/media read replaces text edited before hydration completes. IndexedDB read failure falls back to the browser draft, even when server text was available. | `composer-characterization.test.tsx`, `composer-lifecycle.test.tsx` |
-| Composer saving | Save response bodies do not replace newer UI/local edits. HTTP status on draft writes is ignored; writes are debounced but not serialized, so server completion order has no new guarantee. Hook loading/storage/transport diagnostics do not change the visible UI. | `composer-characterization.test.tsx`, `composer-client-storage.test.ts`, `composer-lifecycle.test.tsx` |
-| Composer conversion overlap | An in-flight conversion can replace a media file selected more recently. This preserves the original page's completion order; changing that policy is a separate fix. Unmounted image/upload tasks and progress timers are now explicitly disposed by the owning hook. | Original page conversion handlers; `composer-lifecycle.test.tsx` |
+| Composer hydration | Draft recovery fills only fields untouched by the user, including intentional clears and target selection. Text and the shared server revision recover independently of media; a failed media import/IndexedDB read cannot replace valid server text. Media chosen while loading survives delayed recovery. An unmounted load cannot apply results. | `composer-characterization.test.tsx`, `composer-lifecycle.test.tsx` |
+| Composer saving | Debounced writes are serialized and advance from successful server revisions; response bodies never replace edits. Non-OK/409 responses stop queued and future writes until reload, retaining local edits. An initial read failure recovers browser text locally without guessing a server revision. Visible loading, saving, local-only, conflict and backup diagnostics offer text copy/download before deliberate reload. | `composer-characterization.test.tsx`, `composer-client-storage.test.ts`, `composer-lifecycle.test.tsx`, `composer-flows.spec.ts` |
+| Composer conversion overlap | Compression/crop results, errors and progress belong to the current media generation and latest transformation. Selection, removal, clear or unmount abort obsolete work; late completion cannot replace current media, preview or dimensions. A stale task cannot settle a newer task's busy state, clear newer upload progress or initiate an upload of the old selection. Image/preview URLs and owned timers are disposed. | `composer-lifecycle.test.tsx`, `composer-characterization.test.tsx`, `composer-media.spec.ts` |
 
 Other covered contracts include target precedence, optional URL normalization,
 error-message precedence, profile/local/environment/default configuration

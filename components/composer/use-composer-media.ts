@@ -57,6 +57,24 @@ export function useComposerMedia({
   const mounted = useRef(true);
   const progressTimers = useRef<Set<number>>(new Set());
   const conversionTasks = useRef<Set<AbortController>>(new Set());
+  const selection = useRef<{ generation: number; file: File | null }>({ generation: 0, file: null });
+  const transformation = useRef<{ generation: number; controller: AbortController } | null>(null);
+  const progressGeneration = useRef(0);
+  const progressCallback = useRef(setProgress);
+  progressCallback.current = setProgress;
+
+  const invalidateTransformation = useCallback(() => {
+    const previous = transformation.current;
+    transformation.current = null;
+    previous?.controller.abort();
+    const hadProgress = previous || progressTimers.current.size > 0;
+    for (const timer of progressTimers.current) window.clearTimeout(timer);
+    progressTimers.current.clear();
+    progressGeneration.current++;
+    setIsCompressingMedia(false);
+    setIsCroppingMedia(false);
+    if (hadProgress && mounted.current) progressCallback.current(null);
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -64,6 +82,7 @@ export function useComposerMedia({
     const tasks = conversionTasks.current;
     return () => {
       mounted.current = false;
+      transformation.current = null;
       for (const timer of timers) window.clearTimeout(timer);
       timers.clear();
       for (const task of tasks) task.abort();
@@ -73,17 +92,20 @@ export function useComposerMedia({
 
   const hydrateMedia = useCallback((file: File | null) => {
     if (file) {
+      invalidateTransformation();
+      selection.current = { generation: selection.current.generation + 1, file };
       setMediaFile(file);
       setMediaInputKey((current) => current + 1);
     }
     setMediaHydrated(true);
-  }, []);
+  }, [invalidateTransformation]);
 
   function clearProgressLater() {
     if (!mounted.current) return;
+    const generation = progressGeneration.current;
     const timer = window.setTimeout(() => {
       progressTimers.current.delete(timer);
-      setProgress(null);
+      if (mounted.current && generation === progressGeneration.current) setProgress(null);
     }, 500);
     progressTimers.current.add(timer);
   }
@@ -210,6 +232,8 @@ export function useComposerMedia({
   }, [mediaFile, mediaHydrated]);
 
   function setDraftMedia(file: File | null) {
+    invalidateTransformation();
+    selection.current = { generation: selection.current.generation + 1, file };
     onEdit();
     setMediaFile(file);
     setMediaDimensions(null);
@@ -271,15 +295,14 @@ export function useComposerMedia({
   }
 
   async function clearMedia() {
-    onEdit();
-    setMediaFile(null);
+    setDraftMedia(null);
     setMediaInputKey((current) => current + 1);
     await saveStoredDraftMedia(null).catch((error: unknown) => { if (mounted.current) setStorageError(errorMessage(error)); });
   }
 
 
   async function compressSelectedMedia(selectedPlatforms: Platform[]) {
-    if (!mediaFile) {
+    if (!mounted.current || !mediaFile || selection.current.file !== mediaFile) {
       return;
     }
 
@@ -290,15 +313,20 @@ export function useComposerMedia({
       return;
     }
 
+    invalidateTransformation();
+    const controller = new AbortController();
+    const task = { generation: selection.current.generation, controller };
+    transformation.current = task;
+    const isCurrent = () => mounted.current && transformation.current === task
+      && selection.current.generation === task.generation && !controller.signal.aborted;
     setError("");
     setIsCompressingMedia(true);
     setProgress({
       label: compression === "video" ? "Starting video compression" : "Starting image compression",
       value: 5
     });
-    const controller = new AbortController();
     conversionTasks.current.add(controller);
-    const reportProgress = (value: ProgressState) => { if (mounted.current) setProgress(value); };
+    const reportProgress = (value: ProgressState) => { if (isCurrent()) setProgress(value); };
 
     try {
       const compressed = compression === "video"
@@ -325,31 +353,41 @@ export function useComposerMedia({
             return image;
           })();
 
-      if (!mounted.current) return;
+      if (!isCurrent()) return;
       setProgress({ label: "Replacing selected media", value: 96 });
+      transformation.current = null;
       setDraftMedia(compressed);
       setProgress({ label: "Compression complete", value: 100 });
+      clearProgressLater();
     } catch (compressionError) {
-      if (!mounted.current) return;
+      if (!isCurrent()) return;
       setError(
         compressionError instanceof Error ? compressionError.message : "Media compression failed"
       );
     } finally {
       conversionTasks.current.delete(controller);
-      if (mounted.current) setIsCompressingMedia(false);
-      clearProgressLater();
+      if (isCurrent()) {
+        transformation.current = null;
+        setIsCompressingMedia(false);
+        clearProgressLater();
+      }
     }
   }
 
   async function cropSelectedMediaForDribbble() {
-    if (!mediaFile || fileKind(mediaFile) !== "image") {
+    if (!mounted.current || !mediaFile || selection.current.file !== mediaFile || fileKind(mediaFile) !== "image") {
       return;
     }
 
+    invalidateTransformation();
+    const controller = new AbortController();
+    const task = { generation: selection.current.generation, controller };
+    transformation.current = task;
+    const isCurrent = () => mounted.current && transformation.current === task
+      && selection.current.generation === task.generation && !controller.signal.aborted;
     setError("");
     setIsCroppingMedia(true);
     setProgress({ label: "Cropping image for Dribbble", value: 12 });
-    const controller = new AbortController();
     conversionTasks.current.add(controller);
 
     try {
@@ -359,18 +397,23 @@ export function useComposerMedia({
         zoom: dribbbleCropZoom
       }, controller.signal);
 
-      if (!mounted.current) return;
+      if (!isCurrent()) return;
       setProgress({ label: "Replacing selected media", value: 82 });
+      transformation.current = null;
       setDraftMedia(cropped);
       setMediaDimensions({ width: 800, height: 600 });
       setProgress({ label: "Dribbble crop complete", value: 100 });
+      clearProgressLater();
     } catch (cropError) {
-      if (!mounted.current) return;
+      if (!isCurrent()) return;
       setError(cropError instanceof Error ? cropError.message : "Dribbble image crop failed");
     } finally {
       conversionTasks.current.delete(controller);
-      if (mounted.current) setIsCroppingMedia(false);
-      clearProgressLater();
+      if (isCurrent()) {
+        transformation.current = null;
+        setIsCroppingMedia(false);
+        clearProgressLater();
+      }
     }
   }
 
@@ -445,11 +488,12 @@ export function useComposerMedia({
       return mediaDimensions;
     }
 
+    const generation = selection.current.generation;
     const controller = new AbortController();
     conversionTasks.current.add(controller);
     try {
       const dimensions = await readImageDimensions(file, controller.signal);
-      if (mounted.current) setMediaDimensions(dimensions);
+      if (mounted.current && generation === selection.current.generation && file === selection.current.file) setMediaDimensions(dimensions);
       return dimensions;
     } finally {
       conversionTasks.current.delete(controller);
@@ -458,7 +502,9 @@ export function useComposerMedia({
 
 
   async function uploadSelectedMedia(signal: AbortSignal): Promise<UploadedMedia | undefined> {
+    if (!mounted.current || selection.current.file !== mediaFile) throw new DOMException("Media selection changed", "AbortError");
     if (!mediaFile) return undefined;
+    invalidateTransformation();
     setIsUploadingMedia(true);
     setUploadError("");
     setProgress({ label: "Uploading media locally", value: 15 });
