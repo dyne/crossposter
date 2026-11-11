@@ -3,6 +3,7 @@ import { actionRevision, type ActionRecord, type StoredAction } from "./action-s
 import { payloadDigest } from "./canonical";
 import { ControlError } from "./errors";
 import type { ControlReadConfig } from "./read-storage";
+import { rescheduleBinding } from "./reschedule-policy";
 
 export type QueueDependencies = {
   readConfig: () => ControlReadConfig;
@@ -29,6 +30,8 @@ function desired(record: ActionRecord): ScheduledPost | null {
     ...(payload.media ? { media: { id: payload.media.id, filename: payload.media.filename, contentType: payload.media.contentType,
       size: payload.media.size, kind: payload.media.kind, url: payload.media.url } } : {}),
     status: "scheduled", attempts: intent.attempts,
+    ...(intent.results ? { results: intent.results.map((result) => ({ ...result, message: result.message ?? "" })) } : {}),
+    ...(intent.lastError ? { lastError: intent.lastError } : {}),
     ...(intent.publishedPostId ? { publishedPostId: intent.publishedPostId } : {}),
     authorization: { actionId: action.id, payloadDigest: action.payloadDigest } };
 }
@@ -94,10 +97,14 @@ export function createApprovedQueue(deps: QueueDependencies) {
       const id = approvedScheduleId(record.action)!;
       const previous = config.scheduledPosts.find((post) => post.id === id);
       if (record.action.payload.mode === "schedule" ? Boolean(previous) : !previous || !["scheduled", "failed"].includes(previous.status)) throw new ControlError("revision_conflict");
+      if (record.action.payload.mode === "reschedule" && (!previous
+        || rescheduleBinding(previous, deps.readRecords()) !== record.scheduleBinding)) throw new ControlError("action_conflict");
       const now = deps.now().toISOString();
       return { ...record, action: { ...record.action, scheduleId: id }, queueIntent: {
         beforeDigest: previous ? payloadDigest(previous) : null, createdAt: previous?.createdAt ?? now,
         updatedAt: now, attempts: previous?.attempts ?? 0, ...(previous?.publishedPostId ? { publishedPostId: previous.publishedPostId } : {}),
+        ...(previous?.results ? { results: previous.results } : {}),
+        ...(previous && "lastError" in previous && typeof previous.lastError === "string" ? { lastError: previous.lastError } : {}),
         ...(previous?.authorization ? { supersedes: previous.authorization.actionId } : {}) } };
     },
     reconcile(record: ActionRecord): StoredAction | null {

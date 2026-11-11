@@ -5,6 +5,9 @@ import { requestOrigin } from "@/lib/request-origin";
 import { ensureSchedulerStarted } from "@/lib/scheduler";
 import { findScheduledPost, scheduledQueue } from "@/lib/scheduling/queries";
 import { scheduledClaimRevision } from "@/lib/scheduling/policy";
+import { rescheduleBinding } from "@/lib/control/reschedule-policy";
+import { readActionJournal } from "@/lib/control/action-store";
+import { dataRoot } from "@/lib/runtime-paths";
 
 export const runtime = "nodejs";
 
@@ -26,9 +29,18 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Scheduled post was not found" }, { status: 404 });
   }
 
-  if (current.status === "publishing" || current.status === "published") {
+  const evidence = rescheduleBinding(current, readActionJournal(dataRoot()).records);
+  if (!evidence) {
     return NextResponse.json(
       { error: "This scheduled post can no longer be rescheduled." },
+      { status: 400 }
+    );
+  }
+  // An old approval freezes its original timing. A safe new time still needs
+  // a fresh control preparation and independent owner approval.
+  if (current.authorization) {
+    return NextResponse.json(
+      { error: "Prepare a new reschedule and obtain owner approval to change this approved schedule." },
       { status: 400 }
     );
   }
@@ -49,8 +61,9 @@ export async function PATCH(request: Request, context: RouteContext) {
   let updated;
   try {
     updated = updateScheduledPost(id, (post) => {
-      if (post.status === "publishing" || post.status === "published" || scheduledClaimRevision(post) !== scheduledClaimRevision(current)) throw conflict;
-      return { ...post, scheduledFor: new Date(scheduledAt).toISOString(), updatedAt: new Date().toISOString(), status: "scheduled", lastError: undefined, results: undefined };
+      if (scheduledClaimRevision(post) !== scheduledClaimRevision(current)
+        || rescheduleBinding(post, readActionJournal(dataRoot()).records) !== evidence) throw conflict;
+      return { ...post, scheduledFor: new Date(scheduledAt).toISOString(), updatedAt: new Date().toISOString(), status: "scheduled" };
     });
   } catch (error) {
     if (error !== conflict) throw error;

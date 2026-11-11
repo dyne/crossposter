@@ -43,10 +43,10 @@ async function fixture() {
   const approve = (action: StoredAction) => actions.decide(action.id, { decision: "approve", expectedRevision: action.revision, expectedDigest: action.payloadDigest, expiresAt: action.expiresAt }, () => {});
   const commit = (action: StoredAction) => ({ actionId: action.id, expectedDigest: action.payloadDigest });
   const replace = vi.fn((id: string, post: ScheduledPost | null) => { if (post) upsertScheduledPost(post); else removeScheduledPost(id); });
-  const make = (overrides: { saveRecord?: typeof deps.saveRecord; publishSaveRecord?: typeof deps.saveRecord; replace?: typeof replace; appendHistory?: typeof appendPublishedPost } = {}) => {
+  const make = (overrides: { saveRecord?: typeof deps.saveRecord; publishSaveRecord?: typeof deps.saveRecord; replace?: typeof replace; appendHistory?: typeof appendPublishedPost; readUploadedMedia?: typeof getUploadedMedia } = {}) => {
     const saveRecord = overrides.saveRecord ?? deps.saveRecord;
     const queue = createApprovedQueue({ ...deps, saveRecord, replace: overrides.replace ?? replace });
-    const run = createApprovedPublisher({ ...deps, saveRecord: overrides.publishSaveRecord ?? deps.saveRecord, providers, readUploadedMedia: getUploadedMedia, appendHistory: overrides.appendHistory ?? appendPublishedPost, assertContext: () => {} });
+    const run = createApprovedPublisher({ ...deps, saveRecord: overrides.publishSaveRecord ?? deps.saveRecord, providers, readUploadedMedia: overrides.readUploadedMedia ?? getUploadedMedia, appendHistory: overrides.appendHistory ?? appendPublishedPost, assertContext: () => {} });
     const service = createExecutionService({ ...deps, saveRecord: (record, revision) => saveRecord(record, revision), snapshot: actions.executionSnapshot, queue, run });
     services.push(service); executionBackends.set(root, { token: credential.token, service }); return service;
   };
@@ -62,6 +62,104 @@ async function fixture() {
 }
 
 describe("approved queue mutations", () => {
+  it("retains proof and history for a pre-dispatch media validation failure and a freshly approved timing change", async () => {
+    const f = await fixture(); const { saveUploadedMedia } = await import("@/lib/media-store"); const media = await saveUploadedMedia(imageFile(), origin);
+    const prepared = await f.actions.prepare({ ...input, content: { ...input.content, mediaId: media.id } }); await f.approve(prepared);
+    const service = f.make({ readUploadedMedia: async () => { throw new Error("Pre-dispatch media validation failed"); } });
+    const queued = await service.commit(f.commit(prepared)); vi.setSystemTime(new Date(input.scheduledFor));
+    const { runScheduledTick } = await import("@/lib/scheduler"); await runScheduledTick();
+    const before = f.getScheduledPosts()[0]; const original = f.current(prepared.id);
+    expect(before).toMatchObject({ status: "failed", attempts: 1, results: [{ ok: false }] });
+    expect(original.action).toMatchObject({ state: "failed", outcomes: [{ state: "not_dispatched" }] });
+    const history = f.config().publishedPosts;
+    const { GET: readQueue } = await import("@/app/api/scheduled/route"); const { GET: readDraft } = await import("@/app/api/draft/route");
+    const bytesBeforeRead = fs.readFileSync(f.filename, "utf8");
+    expect((await (await readQueue()).json()).scheduledPosts[0].outcomes[0].state).toBe("not_dispatched");
+    expect((await (await readDraft()).json()).publishedPosts[0].outcomes[0].state).toBe("not_dispatched");
+    expect(fs.readFileSync(f.filename, "utf8")).toBe(bytesBeforeRead);
+    const action = await f.actions.prepare({ mode: "reschedule", requestKey: "safe-failure", scheduleId: queued.scheduleId!, expectedRevision: await f.revision(queued.scheduleId!), scheduledFor: "2026-01-17T12:00:00Z" });
+    await f.approve(action); expect((await f.make().commit(f.commit(action))).state).toBe("rescheduled");
+    expect(f.getScheduledPosts()[0]).toMatchObject({ results: before.results, lastError: before.lastError, attempts: 1, publishedPostId: before.publishedPostId });
+    expect(f.current(prepared.id)).toEqual(original); expect(f.config().publishedPosts).toEqual(history); expect(f.providers.bluesky).not.toHaveBeenCalled();
+    const next = await f.actions.prepare({ mode: "reschedule", requestKey: "safe-second-timing", scheduleId: queued.scheduleId!, expectedRevision: await f.revision(queued.scheduleId!), scheduledFor: "2026-01-18T12:00:00Z" });
+    await f.approve(next); expect((await f.make().commit(f.commit(next))).state).toBe("rescheduled");
+    expect(f.getScheduledPosts()[0]).toMatchObject({ results: before.results, attempts: 1 });
+    expect(f.current(prepared.id)).toEqual(original); expect(f.config().publishedPosts).toEqual(history);
+  });
+
+  it.each(["attempt-without-results", "failed-without-terminal-proof", "unexpected-attempt-count", "results-without-attempt"] as const)("refuses control timing edits for %s", async (kind) => {
+    const f = await fixture(); const { id } = await f.queued();
+    f.updateScheduledPost(id, (post) => ({ ...post, status: kind === "failed-without-terminal-proof" ? "failed" : "scheduled", attempts: kind === "results-without-attempt" ? 0 : kind === "unexpected-attempt-count" ? 4 : 1,
+      ...(kind === "results-without-attempt" ? { results: [{ platform: "bluesky", ok: false, message: "Unexplained result" }] } : {}) }));
+    const before = fs.readFileSync(f.filename, "utf8"); const journal = fs.readFileSync(path.join(f.root, ".poster-actions.json"), "utf8");
+    await expect(f.actions.prepare({ mode: "reschedule", requestKey: "unproven", scheduleId: id, expectedRevision: await f.revision(id), scheduledFor: "2026-01-17T12:00:00Z" })).rejects.toMatchObject({ code: "revision_conflict" });
+    expect(fs.readFileSync(f.filename, "utf8")).toBe(before); expect(fs.readFileSync(path.join(f.root, ".poster-actions.json"), "utf8")).toBe(journal); expect(f.providers.bluesky).not.toHaveBeenCalled();
+  });
+
+  it("requires fresh independent approval instead of changing an approved schedule through PATCH", async () => {
+    const f = await fixture(); const { id } = await f.queued(); const { PATCH } = await import("@/app/api/scheduled/[id]/route");
+    const before = fs.readFileSync(f.filename, "utf8"); const journal = fs.readFileSync(path.join(f.root, ".poster-actions.json"), "utf8");
+    const response = await PATCH(new Request(`${origin}/api/scheduled/${id}`, { method: "PATCH", body: "{" }), { params: Promise.resolve({ id }) });
+    expect(response.status).toBe(400); expect((await response.json()).error).toMatch(/owner approval/);
+    expect(fs.readFileSync(f.filename, "utf8")).toBe(before); expect(fs.readFileSync(path.join(f.root, ".poster-actions.json"), "utf8")).toBe(journal); expect(f.providers.bluesky).not.toHaveBeenCalled();
+  });
+
+  it("rejects a held preparation when its previously safe journal evidence changes", async () => {
+    const f = await fixture(); const { saveUploadedMedia } = await import("@/lib/media-store"); const media = await saveUploadedMedia(imageFile(), origin);
+    const prepared = await f.actions.prepare({ ...input, content: { ...input.content, mediaId: media.id } }); await f.approve(prepared);
+    const queued = await f.make().commit(f.commit(prepared)); const id = queued.scheduleId!;
+    let release!: () => void; const held = new Promise<void>((resolve) => { release = resolve; });
+    const read = f.deps.readMedia; vi.spyOn(f.deps, "readMedia").mockImplementation(async (mediaId) => { await held; return read(mediaId); });
+    const preparation = f.actions.prepare({ mode: "reschedule", requestKey: "held-proof", scheduleId: id, expectedRevision: await f.revision(id), scheduledFor: "2026-01-17T12:00:00Z" });
+    const settled = Promise.allSettled([preparation]);
+    try {
+      await vi.waitFor(() => expect(f.deps.readMedia).toHaveBeenCalledOnce());
+      const { actionRevision } = await import("@/lib/control/action-store"); const record = f.current(prepared.id); const canceled = { ...record.action, state: "canceled" as const }; canceled.revision = actionRevision(canceled);
+      f.deps.saveRecord({ ...record, action: canceled }, record.action.revision); const before = fs.readFileSync(f.filename, "utf8");
+      release(); await expect(within(preparation)).rejects.toMatchObject({ code: "revision_conflict" }); expect(fs.readFileSync(f.filename, "utf8")).toBe(before); expect(f.providers.bluesky).not.toHaveBeenCalled();
+    } finally { release(); await within(settled); }
+  });
+
+  it.each(["returned-failure", "uncertain-exception", "success-history-failure", "mixed-targets"] as const)("blocks legacy and control timing edits after %s", async (scenario) => {
+    const f = await fixture();
+    if (scenario === "mixed-targets") f.change((c) => { c.profiles = { bluesky: [{ id: "second", label: "Second", values: c.values }] }; });
+    const prepared = await f.actions.prepare({ ...input, targetIds: scenario === "mixed-targets" ? ["bluesky:base", "bluesky:second"] : input.targetIds }); await f.approve(prepared);
+    const service = f.make(scenario === "success-history-failure" ? { appendHistory: () => { throw new Error("History failed after publication"); } } : {});
+    const queued = await service.commit(f.commit(prepared)); vi.setSystemTime(new Date(input.scheduledFor));
+    vi.mocked(f.providers.bluesky).mockImplementation(async (ctx) => {
+      if (scenario === "uncertain-exception") throw new Error("Response failed after possible acceptance");
+      return { platform: "bluesky", ok: scenario === "success-history-failure" || (scenario === "mixed-targets" && !ctx.target?.profileId), message: "Fixture result" };
+    });
+    f.updateScheduledPost(queued.scheduleId!, (post) => ({ ...post, status: "publishing", updatedAt: new Date().toISOString() }));
+    await service.dispatchScheduled(f.getScheduledPosts()[0]);
+    // Retain a failed queue label even for success; it cannot erase the journal.
+    f.updateScheduledPost(queued.scheduleId!, (post) => ({ ...post, status: "failed", attempts: 1 }));
+    const before = fs.readFileSync(f.filename, "utf8"); const journal = fs.readFileSync(path.join(f.root, ".poster-actions.json"), "utf8"); const calls = vi.mocked(f.providers.bluesky).mock.calls.length;
+    const { PATCH } = await import("@/app/api/scheduled/[id]/route");
+    const response = await PATCH(new Request(`${origin}/api/scheduled/${queued.scheduleId}`, { method: "PATCH", body: JSON.stringify({ scheduledFor: "2026-01-17T12:00:00Z" }) }), { params: Promise.resolve({ id: queued.scheduleId! }) });
+    expect(response.status).toBe(400);
+    await expect(f.actions.prepare({ mode: "reschedule", requestKey: "unsafe", scheduleId: queued.scheduleId!, expectedRevision: await f.revision(queued.scheduleId!), scheduledFor: "2026-01-17T12:00:00Z" })).rejects.toMatchObject({ code: "revision_conflict" });
+    expect(fs.readFileSync(f.filename, "utf8")).toBe(before); expect(fs.readFileSync(path.join(f.root, ".poster-actions.json"), "utf8")).toBe(journal); expect(f.providers.bluesky).toHaveBeenCalledTimes(calls);
+  });
+
+  it.each(["missing", "corrupt", "dispatching", "changed-safe-evidence"] as const)("revalidates %s journal evidence at reschedule commit", async (kind) => {
+    const f = await fixture(); const { id, action: original } = await f.queued();
+    const action = await f.actions.prepare({ mode: "reschedule", requestKey: "journal-race", scheduleId: id, expectedRevision: await f.revision(id), scheduledFor: "2026-01-17T12:00:00Z" }); await f.approve(action);
+    const filename = path.join(f.root, ".poster-actions.json");
+    if (kind === "missing") fs.unlinkSync(filename);
+    else if (kind === "corrupt") fs.writeFileSync(filename, "{broken journal");
+    else {
+      const { actionRevision } = await import("@/lib/control/action-store"); const record = f.current(original.id);
+      const changed: StoredAction = { ...record.action, ...(kind === "dispatching" ? { state: "executing", postId: `action-${original.id}`, outcomes: record.action.outcomes.map((outcome) => ({ ...outcome, state: "dispatching" as const })) }
+        : { state: "canceled" }) }; changed.revision = actionRevision(changed); f.deps.saveRecord({ ...record, action: changed }, record.action.revision);
+    }
+    const before = fs.readFileSync(f.filename, "utf8"); f.replace.mockClear();
+    await expect(f.make().commit(f.commit(action))).rejects.toMatchObject({ code: kind === "missing" || kind === "corrupt" ? "storage_corrupt" : "action_conflict" });
+    expect(f.replace).not.toHaveBeenCalled(); expect(fs.readFileSync(f.filename, "utf8")).toBe(before); expect(f.providers.bluesky).not.toHaveBeenCalled();
+    // Restore a readable journal for owned teardown when corruption was injected.
+    if (kind === "missing" || kind === "corrupt") fs.writeFileSync(filename, JSON.stringify({ version: 1, records: [] }), { mode: 0o600 });
+  });
+
   it("retains a deterministic authorized queue entry across replay/restart and executes after approval expiry", async () => {
     const f = await fixture(); const prepared = await f.actions.prepare(input); await f.approve(prepared); const service = f.make();
     const [first, replay] = await Promise.all([service.commit(f.commit(prepared)), service.commit(f.commit(prepared))]);

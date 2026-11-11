@@ -146,9 +146,9 @@ describe("composed publish output", () => {
     try {
       await act(async () => held.resolve(json({ results: mixedResults })));
       const results = screen.getByLabelText("Latest publish result");
-      expect(within(results).getByText("ok")).toHaveClass("ok");
-      expect(within(results).getByText("check")).toHaveClass("unknown");
-      expect(within(results).getByText("error")).toHaveClass("err");
+      expect(within(results).getByText("Published")).toHaveClass("ok");
+      expect(within(results).getByText("Outcome unknown")).toHaveClass("unknown");
+      expect(within(results).getByText("Failed")).toHaveClass("err");
       expect(results).toHaveTextContent("Bluesky · Fixture two");
       expect(results).toHaveTextContent("Fixture unknown; check profile");
       expect(within(results).getByRole("link")).toHaveAttribute("rel", "noreferrer");
@@ -175,8 +175,8 @@ describe("composed publish output", () => {
     const historyList = await screen.findByLabelText("Published posts");
     expect(within(historyList).getByText("Fixture history")).toBeVisible();
     expect(within(historyList).getByText("Fixture history body")).toBeVisible();
-    expect(within(historyList).getByText("1/3 ok · 1 check")).toHaveClass("ok");
-    expect(within(historyList).getByTitle("Fixture unknown; check profile")).toHaveClass("unknown");
+    expect(within(historyList).getByText("1 published · 1 failed · 1 outcome unknown")).toBeVisible();
+    expect(within(historyList).getByText("Fixture unknown; check profile")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Clear history" }));
     await screen.findByText("No published post yet");
     expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/draft?scope=history", { method: "DELETE" });

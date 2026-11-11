@@ -8,16 +8,18 @@ import { controlEnabled } from "@/lib/control/backend-mutation";
 import { dataRoot } from "@/lib/runtime-paths";
 import { ControlError } from "@/lib/control/errors";
 import { readControlMedia, controlMediaRevision } from "@/lib/control/read-storage";
+import { dashboardOutcomeRecords, publicationOutcomeView } from "@/lib/control/outcome-projection";
 
 export const runtime = "nodejs";
 
 export function GET() {
   const localConfig = readLocalConfig();
+  const records = dashboardOutcomeRecords();
 
   return NextResponse.json({
     draft: localConfig.draft,
     revision: composerDraftRevision(localConfig.draft),
-    publishedPosts: localConfig.publishedPosts
+    publishedPosts: localConfig.publishedPosts.map((post) => publicationOutcomeView(post, records))
   });
 }
 

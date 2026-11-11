@@ -19,6 +19,21 @@ beforeEach(() => {
 });
 
 describe("scheduled item routes", () => {
+  it.each([
+    { status: "failed" as const, attempts: 1 },
+    { status: "scheduled" as const, attempts: 1 },
+    { status: "failed" as const, attempts: 0, results: [{ platform: "bluesky" as const, ok: false, message: "Generic failure" }] },
+    { status: "scheduled" as const, attempts: 0, results: [{ platform: "bluesky" as const, ok: true, message: "Success without URL" }] },
+    { status: "failed" as const, attempts: 1, results: [{ platform: "bluesky" as const, ok: false, uncertain: true, message: "Unknown" }] }
+  ])("rejects legacy ambiguous or dispatched attempts $status/$attempts without mutation or provider IO", async (overrides) => {
+    await saveConfig({ scheduledPosts: [scheduledPost(overrides)] }); const providers = await successfulProviders();
+    const { getScheduledPosts, readLocalConfig } = await import("@/lib/local-config"); const before = readLocalConfig();
+    const { PATCH } = await import("@/app/api/scheduled/[id]/route");
+    expect((await PATCH(patchRequest({ scheduledFor: future }), context())).status).toBe(400);
+    expect(readLocalConfig()).toEqual(before); expect(getScheduledPosts()[0]).toMatchObject(overrides);
+    for (const provider of Object.values(providers)) expect(provider).not.toHaveBeenCalled();
+  });
+
   it("rejects a reschedule body which finishes after a tick claims the item, then settles both publishers", async () => {
     await saveConfig({ scheduledPosts: [scheduledPost({ scheduledFor: now })] }); const providers = await successfulProviders();
     let releaseBody!: () => void; let releaseProvider!: () => void; let enteredBody!: () => void; let enteredProvider!: () => void;
@@ -61,7 +76,7 @@ describe("scheduled item routes", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("reschedules a failed entry and clears errors/results while retaining attempts and history linkage", async () => {
+  it("rejects an ambiguous failed entry without erasing errors/results, attempts or history linkage", async () => {
     const failed = scheduledPost({
       status: "failed", attempts: 4, lastError: "Check the profile before rescheduling",
       results: [{ platform: "bluesky", ok: false, message: "Failed" }],
@@ -73,25 +88,24 @@ describe("scheduled item routes", () => {
     ] });
     const { PATCH } = await import("@/app/api/scheduled/[id]/route");
     const response = await PATCH(patchRequest({ scheduledFor: "2026-01-17T13:00:00+01:00" }), context());
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(400);
     const body = await response.json();
     const { getScheduledPosts } = await import("@/lib/local-config");
     const saved = getScheduledPosts().find((post) => post.id === failed.id);
-    expect(body.scheduledPost).toEqual(saved);
+    expect(body.error).toBe("This scheduled post can no longer be rescheduled.");
     expect(saved).toEqual({
-      ...failed, status: "scheduled", scheduledFor: "2026-01-17T12:00:00.000Z", updatedAt: now,
-      results: undefined, lastError: undefined, targets: []
+      ...failed, targets: []
     });
-    expect(body.scheduledPosts.map((post: ScheduledPost) => post.id)).toEqual([failed.id, "old"]);
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("allows an existing canceled entry to be rescheduled", async () => {
+  it("rejects timing edits to canceled entries", async () => {
     await saveConfig({ scheduledPosts: [scheduledPost({ status: "canceled" })] });
     const { PATCH } = await import("@/app/api/scheduled/[id]/route");
     const response = await PATCH(patchRequest({ scheduledFor: future }), context());
-    expect(response.status).toBe(200);
-    expect((await response.json()).scheduledPost.status).toBe("scheduled");
+    expect(response.status).toBe(400);
+    const { getScheduledPosts } = await import("@/lib/local-config");
+    expect(getScheduledPosts()[0].status).toBe("canceled");
   });
 
   it.each([

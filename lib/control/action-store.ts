@@ -2,7 +2,7 @@ import "server-only";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod-control";
-import { actionSchema, digestSchema, idSchema, timestampSchema } from "./contracts";
+import { actionSchema, digestSchema, idSchema, platformSchema, timestampSchema } from "./contracts";
 import { payloadDigest } from "./canonical";
 import { ControlError } from "./errors";
 import type { BackendOwner } from "./backend-ownership";
@@ -21,7 +21,10 @@ const recordSchema = z.strictObject({
   accountBindings: z.record(z.string(), digestSchema),
   scheduleBinding: digestSchema.optional(),
   queueIntent: z.strictObject({ beforeDigest: digestSchema.nullable(), createdAt: timestampSchema,
-    updatedAt: timestampSchema, attempts: z.number().int().nonnegative(), publishedPostId: idSchema.optional(), supersedes: idSchema.optional() }).optional()
+    updatedAt: timestampSchema, attempts: z.number().int().nonnegative(), publishedPostId: idSchema.optional(), supersedes: idSchema.optional(),
+    results: z.array(z.object({ platform: platformSchema,
+      targetId: z.string().optional(), profileId: z.string().optional(), profileLabel: z.string().optional(), ok: z.boolean(), uncertain: z.boolean().optional(),
+      message: z.string().optional(), url: z.string().optional() })).optional(), lastError: z.string().optional() }).optional()
 });
 const journalSchema = z.strictObject({ version: z.literal(1), records: z.array(recordSchema) });
 export type ActionRecord = z.infer<typeof recordSchema>;

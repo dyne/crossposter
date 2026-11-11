@@ -2,18 +2,20 @@
 
 import { AlertTriangle, Clock3, ExternalLink, File as FileIcon, Music2 } from "lucide-react";
 import { SocialLogo } from "@/components/social-logo";
-import type { PublishTarget, ScheduledPost } from "@/lib/types";
+import type { PublishTarget } from "@/lib/types";
 import { platformLabels } from "@/lib/platform-catalog";
 import { formatDateTime } from "@/lib/scheduled/calendar";
-import { formatBytes, statusLabel, resultStatusClass } from "@/lib/scheduled/presentation";
+import { formatBytes, statusLabel } from "@/lib/scheduled/presentation";
 import { ScheduledItemActions, type ScheduledItemActionsProps } from "./scheduled-item-actions";
+import { neverAttemptedSchedule } from "@/lib/scheduling/reschedule-policy";
+import { inspectBeforeNewAttempt, outcomeSummary, publicationRows, type ScheduleView } from "@/lib/publication-outcomes";
+import { PublicationOutcomes } from "@/components/publication-outcomes";
 
-type ScheduledItemProps = ScheduledItemActionsProps & { post: ScheduledPost };
+type ScheduledItemProps = ScheduledItemActionsProps & { post: ScheduleView };
 
 export function ScheduledItem({ post, editValue, busy, onEdit, onReschedule, onDiscard }: ScheduledItemProps) {
-  const canEdit = post.status !== "publishing";
-  const okCount = post.results?.filter((result) => result.ok).length || 0;
-  const uncertainCount = post.results?.filter((result) => result.uncertain).length || 0;
+  const canEdit = post.status !== "publishing" && post.status !== "published";
+  const canReschedule = !post.authorization && neverAttemptedSchedule(post);
   const postTargets: PublishTarget[] = post.targets?.length
     ? post.targets
     : post.platforms.map((platform) => ({ id: platform, platform }));
@@ -22,6 +24,7 @@ export function ScheduledItem({ post, editValue, busy, onEdit, onReschedule, onD
     platform: target.platform,
     label: `${platformLabels[target.platform]}${target.profileLabel ? ` · ${target.profileLabel}` : ""}`
   }));
+  const rows = publicationRows(post.results ?? [], postTargets, post.outcomes, canReschedule);
 
   return (
     <article className="scheduled-card">
@@ -58,59 +61,31 @@ export function ScheduledItem({ post, editValue, busy, onEdit, onReschedule, onD
           ))}
         </div>
 
-        {post.lastError ? (
+        {post.lastError && post.lastError.length > 200 ? <details className="outcome-details schedule-error">
+          <summary>Schedule error details</summary>
+          <p>{post.lastError}</p>
+        </details> : post.lastError ? (
           <p className="error-line">
             <AlertTriangle size={16} />
-            {post.lastError}
+            <span>{post.lastError}</span>
           </p>
         ) : null}
 
-        {post.results?.length ? (
+        {rows.length ? (
           <div className="scheduled-results">
-            <strong>
-              Result: {okCount}/{post.results.length} ok
-              {uncertainCount > 0 ? ` · ${uncertainCount} check` : ""}
-            </strong>
-            <div className="history-platforms">
-              {post.results.map((result, index) => {
-                const content = (
-                  <>
-                    <SocialLogo platform={result.platform} size="sm" />
-                    <span>
-                      {platformLabels[result.platform]}
-                      {result.profileLabel ? ` · ${result.profileLabel}` : ""}
-                    </span>
-                    {result.url ? <ExternalLink size={13} /> : null}
-                  </>
-                );
-
-                return result.url ? (
-                  <a
-                    className={`history-platform ${resultStatusClass(result)}`}
-                    href={result.url}
-                    key={result.targetId || `${result.platform}:${index}`}
-                    rel="noreferrer"
-                    target="_blank"
-                    title={result.message}
-                  >
-                    {content}
-                  </a>
-                ) : (
-                  <span
-                    className={`history-platform ${resultStatusClass(result)}`}
-                    key={result.targetId || `${result.platform}:${index}`}
-                    title={result.message}
-                  >
-                    {content}
-                  </span>
-                );
-              })}
-            </div>
+            <strong>{outcomeSummary(rows)}</strong>
+            <PublicationOutcomes rows={rows} />
           </div>
         ) : null}
 
+        {!canReschedule && canEdit ? <div className="outcome-guidance">
+          <p>{post.authorization ? "This schedule has frozen approval. Changing its time requires a new reschedule preparation and owner approval." : "Timing changes are unavailable because this record does not prove that every account was never dispatched."}</p>
+          <p>{inspectBeforeNewAttempt}</p>
+          <p>Discard removes this local queue entry only. It does not remove a post from a remote account.</p>
+        </div> : null}
+
         {canEdit ? (
-          <ScheduledItemActions editValue={editValue} busy={busy} onEdit={onEdit} onReschedule={onReschedule} onDiscard={onDiscard} />
+          <ScheduledItemActions editValue={editValue} busy={busy} canReschedule={canReschedule} onEdit={onEdit} onReschedule={onReschedule} onDiscard={onDiscard} />
         ) : null}
       </div>
       {post.media ? (

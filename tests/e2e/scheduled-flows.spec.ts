@@ -32,8 +32,12 @@ for (const timezoneId of ["Europe/Berlin", "UTC"]) {
       await page.goto("/scheduled");
       const failed = page.locator("article").filter({ hasText: "Check uncertain result" });
       await expect(failed.locator(".scheduler-status")).toHaveText("failed");
-      await expect(failed.locator(".scheduled-results strong")).toHaveText("Result: 0/1 ok · 1 check");
-      await expect(failed.locator(".history-platform.unknown")).toHaveText("Bluesky · Fixture profile");
+      await expect(failed.locator(".scheduled-results > strong")).toHaveText("1 outcome unknown");
+      await expect(failed.locator(".outcome-row")).toContainText("Bluesky · Fixture profile");
+      await expect(failed.getByText("Outcome unknown", { exact: true })).toBeVisible();
+      await expect(failed.getByLabel("Edit timing")).toHaveCount(0);
+      await expect(failed.getByRole("button", { name: "Save timing" })).toHaveCount(0);
+      await expect(failed.getByRole("button", { name: "Discard" })).toBeEnabled();
       await expect(failed.locator("time")).toHaveText(timezoneId === "Europe/Berlin" ? "Oct 28, 2026, 9:00 AM" : "Oct 28, 2026, 8:00 AM");
       await expect(page.locator(".scheduled-card h3")).toHaveText(["Publishing fixture", "Due fixture", "Later scheduled fixture", "Check uncertain result"]);
       await expect(page.locator("article").filter({ hasText: "Due fixture" }).locator(".scheduler-status")).toHaveText("due now");
@@ -44,17 +48,17 @@ for (const timezoneId of ["Europe/Berlin", "UTC"]) {
 
     test("reschedules with UTC wire time, moves grouping and keeps the selected date", async ({ page, scheduleState }) => {
       await page.goto("/scheduled");
-      const failed = page.locator("article").filter({ hasText: "Check uncertain result" });
-      await failed.getByLabel("Edit timing").fill("2026-11-01T18:45");
-      await failed.getByRole("button", { name: "Save timing" }).click();
+      const scheduled = page.locator("article").filter({ hasText: "Later scheduled fixture" });
+      await scheduled.getByLabel("Edit timing").fill("2026-11-01T18:45");
+      await scheduled.getByRole("button", { name: "Save timing" }).click();
       await expect(page.getByRole("status")).toHaveText("Schedule timing updated.");
-      expect(scheduleState.writes).toEqual([{ method: "PATCH", path: "/api/scheduled/failed%2Fid", body: { scheduledFor: timezoneId === "Europe/Berlin" ? "2026-11-01T17:45:00.000Z" : "2026-11-01T18:45:00.000Z" } }]);
+      expect(scheduleState.writes).toEqual([{ method: "PATCH", path: "/api/scheduled/later", body: { scheduledFor: timezoneId === "Europe/Berlin" ? "2026-11-01T17:45:00.000Z" : "2026-11-01T18:45:00.000Z" } }]);
       await expect(page.locator(".scheduler-date-heading")).toContainText("Wednesday, October 28, 2026");
       await expect(page.locator(".scheduled-card")).toHaveCount(3);
       await page.getByRole("button", { name: "11/1/2026: 1 post" }).click();
       await expect(page.getByText("November 2026", { exact: true })).toBeVisible();
-      await expect(failed.getByLabel("Edit timing")).toHaveValue("2026-11-01T18:45");
-      await expect(failed.locator(".scheduler-status")).toHaveText("scheduled");
+      await expect(scheduled.getByLabel("Edit timing")).toHaveValue("2026-11-01T18:45");
+      await expect(scheduled.locator(".scheduler-status")).toHaveText("scheduled");
     });
 
     test("discards a failed uncertain item only through the explicit DELETE action", async ({ page, scheduleState }) => {
@@ -66,15 +70,28 @@ for (const timezoneId of ["Europe/Berlin", "UTC"]) {
       await expect(page.getByLabel("Scheduler counts")).toHaveText("3 scheduled1 publishing0 failed");
     });
 
+    test("keeps approved timing out of direct edits while discard remains keyboard accessible", async ({ page, scheduleState }) => {
+      const post = scheduleState.posts.find((item) => item.id === "later")!;
+      post.authorization = { actionId: "fixture-approved-action", payloadDigest: "sha256:fixture-frozen-timing" };
+      await page.goto("/scheduled");
+      const approved = page.locator("article").filter({ hasText: "Later scheduled fixture" });
+      await expect(approved.getByLabel("Edit timing")).toHaveCount(0);
+      await expect(approved.getByRole("button", { name: "Save timing" })).toHaveCount(0);
+      const discard = approved.getByRole("button", { name: "Discard" }); await discard.focus(); await expect(discard).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("status")).toHaveText("Scheduled post discarded.");
+      expect(scheduleState.writes).toEqual([{ method: "DELETE", path: "/api/scheduled/later", body: null }]);
+    });
+
     for (const action of ["Save timing", "Discard"]) {
       test(`retains edits/item and releases busy buttons on ${action} HTTP failure`, async ({ page, scheduleState }) => {
         await page.goto("/scheduled"); scheduleState.error = "Fixture mutation refused";
-        const failed = page.locator("article").filter({ hasText: "Check uncertain result" });
-        await failed.getByLabel("Edit timing").fill("2026-10-28T18:45");
-        await failed.getByRole("button", { name: action }).click();
+        const scheduled = page.locator("article").filter({ hasText: "Later scheduled fixture" });
+        await scheduled.getByLabel("Edit timing").fill("2026-10-28T18:45");
+        await scheduled.getByRole("button", { name: action }).click();
         await expect(page.getByRole("status")).toHaveText("Fixture mutation refused");
-        await expect(failed.getByLabel("Edit timing")).toHaveValue("2026-10-28T18:45");
-        await expect(failed.getByRole("button", { name: action })).toBeEnabled();
+        await expect(scheduled.getByLabel("Edit timing")).toHaveValue("2026-10-28T18:45");
+        await expect(scheduled.getByRole("button", { name: action })).toBeEnabled();
         await expect(page.locator(".scheduled-card")).toHaveCount(4);
         expect(scheduleState.writes).toHaveLength(1);
       });
@@ -95,7 +112,7 @@ for (const timezoneId of ["Europe/Berlin", "UTC"]) {
     for (const method of ["GET", "PATCH", "DELETE"] as const) {
       test(`shows ${method} transport errors without losing the queue or locking actions`, async ({ page, scheduleState }) => {
         await page.goto("/scheduled");
-        const failed = page.locator("article").filter({ hasText: "Check uncertain result" });
+        const failed = page.locator("article").filter({ hasText: method === "PATCH" ? "Later scheduled fixture" : "Check uncertain result" });
         await expect(failed).toBeVisible(); scheduleState.transportError = method;
         if (method === "GET") await page.getByRole("button", { name: "Refresh", exact: true }).click();
         else await failed.getByRole("button", { name: method === "PATCH" ? "Save timing" : "Discard" }).click();

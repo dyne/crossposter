@@ -3523,6 +3523,56 @@ button:focus-visible,
   border-top-right-radius: var(--radius);
 }
 
+/* Account outcomes share one readable treatment across results and history. */
+.outcome-list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.outcome-row {
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.outcome-row:last-child { padding-bottom: 0; border-bottom: 0; }
+.outcome-row p { margin: 8px 0 0; white-space: pre-wrap; }
+.outcome-head { display: flex; align-items: flex-start; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.outcome-head strong { min-width: 0; overflow-wrap: anywhere; }
+.outcome-head .badge { max-width: 100%; white-space: normal; color: var(--ink); }
+.outcome-head .not-sent { background: var(--counter-bg); color: var(--heading-ink); }
+.outcome-summary { color: var(--muted); font-size: 0.84rem; font-weight: 700; overflow-wrap: anywhere; }
+.outcome-guidance { margin: 0; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.outcome-guidance p { margin: 0; }
+.outcome-guidance p + p { margin-top: 8px; }
+.outcome-details { margin-top: 8px; }
+.outcome-details summary { cursor: pointer; color: var(--heading-ink); overflow-wrap: anywhere; }
+.outcome-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.schedule-error p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.result-list, .result, .history-head > div { min-width: 0; }
+.history-head { flex-wrap: wrap; }
+.publish-panel.has-outcomes { position: static; }
+.publish-panel.has-outcomes .publish-feed { max-height: none; }
+
+/* Flex children and native date controls must fit when text is enlarged. */
+.scheduled-card, .scheduled-card-body > * { min-width: 0; max-width: 100%; }
+.scheduled-card-body { width: 100%; }
+.scheduled-card time, .scheduled-card .error-line span { overflow-wrap: anywhere; }
+.scheduled-card .error-line { align-items: flex-start; color: var(--ink); }
+.scheduled-card .error-line svg { flex: 0 0 auto; margin-top: 2px; color: var(--danger); }
+.scheduled-card .error-line span { min-width: 0; }
+.schedule-card-actions { grid-template-columns: minmax(0, 1fr) auto auto; }
+.schedule-timing-field, .schedule-timing-field label { display: grid; gap: 6px; min-width: 0; }
+.schedule-timing-field input { width: 100%; min-width: 0; max-width: 100%; }
+.schedule-edit-value { margin: 0; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+.schedule-card-actions button { min-width: 0; white-space: normal; }
+@media (max-width: 940px) { .schedule-card-actions { grid-template-columns: minmax(0, 1fr); } }
+
 @media (max-width: 900px) {
   .compose-sticky {
     position: static;

@@ -237,7 +237,7 @@ describe("cancellation of invalid or unavailable publication resources", () => {
       expect(fs.readFileSync(f.filename, "utf8")).toBe(before); expect(fs.readFileSync(path.join(f.root, ".poster-actions.json"), "utf8")).toBe(journal);
       expect(vi.getTimerCount()).toBe(0);
       const { providers } = await import("@/lib/providers"); for (const provider of Object.values(providers)) expect(provider).not.toHaveBeenCalled();
-      const expected = condition === "profile-removed" ? "target_missing" : condition === "session-unavailable" ? "action_conflict" : condition === "media-missing" ? "media_missing" : "validation_failed";
+      const expected = status === "failed" ? "revision_conflict" : condition === "profile-removed" ? "target_missing" : condition === "session-unavailable" ? "action_conflict" : condition === "media-missing" ? "media_missing" : "validation_failed";
       await expect(f.service.prepare({ mode: "reschedule", requestKey: "strict-reschedule", scheduleId: "queue-1", expectedRevision: revision, scheduledFor: "2026-12-01T12:00:00Z" })).rejects.toMatchObject({ code: expected });
       expect(f.deps.readRecords()).toHaveLength(1);
     });

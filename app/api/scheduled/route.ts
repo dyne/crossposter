@@ -7,6 +7,7 @@ import { requestOrigin } from "@/lib/request-origin";
 import { ensureSchedulerStarted } from "@/lib/scheduler";
 import { scheduledQueue } from "@/lib/scheduling/queries";
 import type { Platform, PublishedMedia, PublishTarget, ScheduledPost } from "@/lib/types";
+import { dashboardOutcomeRecords, publicationOutcomeView } from "@/lib/control/outcome-projection";
 
 export const runtime = "nodejs";
 
@@ -28,8 +29,9 @@ function mediaSummary(media: Awaited<ReturnType<typeof getUploadedMedia>>): Publ
 }
 
 export async function GET() {
+  const records = dashboardOutcomeRecords();
   return NextResponse.json({
-    scheduledPosts: scheduledQueue(getScheduledPosts())
+    scheduledPosts: scheduledQueue(getScheduledPosts()).map((post) => publicationOutcomeView(post, records))
   });
 }
 

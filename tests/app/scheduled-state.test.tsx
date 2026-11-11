@@ -8,31 +8,31 @@ afterEach(cleanup);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 it("exposes a pending item's busy state, filters mutation responses and preserves its local edit", async () => {
-  const posts = calendarPosts();
+  const posts = calendarPosts(); posts[1] = { ...posts[1], id: "later/id" }; const editable = posts[1];
   let finish!: (response: Response) => void;
   const pending = new Promise<Response>((resolve) => { finish = resolve; });
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/scheduled" && !init?.method) return json({ scheduledPosts: posts });
-    if (url === "/api/scheduled/failed%2Fid" && init?.method === "PATCH") return pending;
+    if (url === "/api/scheduled/later%2Fid" && init?.method === "PATCH") return pending;
     throw new Error(`Unexpected scheduler fixture ${url}`);
   }));
   const { result } = renderHook(useScheduledPosts);
   await waitFor(() => expect(result.current.isLoading).toBe(false));
-  act(() => result.current.setEdits((edits) => ({ ...edits, [posts[0].id]: "2026-11-01T12:00" })));
+  act(() => result.current.setEdits((edits) => ({ ...edits, [editable.id]: "2026-11-01T12:00" })));
   let mutation!: Promise<void>;
-  act(() => { mutation = result.current.reschedule(posts[0]); });
+  act(() => { mutation = result.current.reschedule(editable); });
   try {
-    expect(result.current.busyId).toBe(posts[0].id); expect(result.current.status).toBe("");
+    expect(result.current.busyId).toBe(editable.id); expect(result.current.status).toBe("");
   } finally {
     await act(async () => {
-      finish(json({ scheduledPosts: [{ ...posts[0], scheduledFor: "2026-11-02T12:00:00Z", status: "scheduled" }, posts[4]] }));
+      finish(json({ scheduledPosts: [{ ...editable, scheduledFor: "2026-11-02T12:00:00Z", status: "scheduled" }, posts[4]] }));
       await mutation;
     });
   }
   expect(result.current.busyId).toBe(""); expect(result.current.status).toBe("Schedule timing updated.");
-  expect(result.current.sortedPosts.map((post) => post.id)).toEqual([posts[0].id]);
+  expect(result.current.sortedPosts.map((post) => post.id)).toEqual([editable.id]);
   expect(result.current.counts).toEqual({ scheduled: 1, publishing: 0, failed: 0 });
-  expect(result.current.edits[posts[0].id]).toBe("2026-11-01T12:00");
+  expect(result.current.edits[editable.id]).toBe("2026-11-01T12:00");
 });
 
 it("keeps the previous queue on malformed JSON and releases discard busy state", async () => {

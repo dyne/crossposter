@@ -10,26 +10,33 @@ export type ScheduledItemActionsProps = {
   onDiscard: () => void;
 };
 
-export function ScheduledItemActions({ editValue, busy, onEdit, onReschedule, onDiscard }: ScheduledItemActionsProps) {
+export function ScheduledItemActions({ editValue, busy, canReschedule = true, onEdit, onReschedule, onDiscard }: ScheduledItemActionsProps & { canReschedule?: boolean }) {
   return (
     <div className="schedule-card-actions">
-      <label>
-        <span>Edit timing</span>
-        <input
-          type="datetime-local"
-          value={editValue}
-          onChange={(event) => onEdit(event.target.value)}
-        />
-      </label>
-      <button
-        className="secondary compact-button"
-        disabled={busy}
-        type="button"
-        onClick={onReschedule}
-      >
-        <CalendarClock size={16} />
-        Save timing
-      </button>
+      {canReschedule ? (
+        <>
+          <div className="schedule-timing-field">
+          <label>
+            <span>Edit timing</span>
+            <input
+              type="datetime-local"
+              value={editValue}
+              onChange={(event) => onEdit(event.target.value)}
+            />
+          </label>
+          <p className="schedule-edit-value">{editValue ? editValue.replace("T", " at ") : "Choose a date and time"}</p>
+          </div>
+          <button
+            className="secondary compact-button"
+            disabled={busy}
+            type="button"
+            onClick={onReschedule}
+          >
+            <CalendarClock size={16} />
+            Save timing
+          </button>
+        </>
+      ) : null}
       <button
         className="danger-button compact-button"
         disabled={busy}
